@@ -2,6 +2,26 @@ import XCTest
 @testable import Orbit
 
 final class ProvidersTests: XCTestCase {
+    func testMiseDiscoveryWithoutShellPath() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        for (data, environment) in [
+            (home.appendingPathComponent(".local/share/mise"), [:]),
+            (home.appendingPathComponent("custom-mise"), ["MISE_DATA_DIR": home.appendingPathComponent("custom-mise").path]),
+            (home.appendingPathComponent("data/mise"), ["XDG_DATA_HOME": home.appendingPathComponent("data").path])
+        ] {
+            let shims = data.appendingPathComponent("shims")
+            try FileManager.default.createDirectory(at: shims, withIntermediateDirectories: true)
+            let name = "orbit-test-provider"
+            let shim = shims.appendingPathComponent(name)
+            try "#!/bin/sh\nexit 0\n".write(to: shim, atomically: true, encoding: .utf8)
+            XCTAssertNil(ProviderTools.executable(name, home: home.path, environment: environment))
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: shim.path)
+            XCTAssertEqual(ProviderTools.executable(name, home: home.path, environment: environment), shim.path)
+            try FileManager.default.removeItem(at: data)
+        }
+    }
+
     func testLiveCodexBucketsAndWeeklyOnlyWindow() throws {
         let result: [String: Any] = [
             "rateLimits": ["primary": ["usedPercent": 99]],

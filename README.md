@@ -66,7 +66,7 @@ After sign-in, click **Check connections**. Authentication and token storage rem
 - **Codex**: installed `codex app-server`, using the documented `account/read` and `account/rateLimits/read` methods. Reads current account quotas without scanning sessions or starting an inference turn. Codex owns Keychain/file authentication and token refresh. Orbit uses the `codex` quota bucket when available and maps windows by duration, including weekly-only responses. Requires a current Codex CLI; there is no stale session-log fallback.
 - **Antigravity**: runs `agy -p /usage` (Antigravity CLI, looked up in `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`) and shows the most used model group per window.
 
-Codex and Antigravity executables are discovered in standard installation locations; Codex also searches the inherited `PATH`. Provider errors do not expose credentials or raw account responses. Credential/account access audit events write status and provider names to stdout without tokens, emails, paths or quota values.
+Provider executables are discovered in standard installation locations, mise's shims directory (`~/.local/share/mise/shims`, respecting `MISE_DATA_DIR` and `XDG_DATA_HOME`), and the inherited `PATH`. This works when Orbit is launched from Finder without shell initialization. Claude's credentials remain in the same Keychain/file locations regardless of its install manager. Provider errors do not expose credentials or raw account responses. Credential/account access audit events write status and provider names to stdout without tokens, emails, paths or quota values.
 
 ## Privacy
 

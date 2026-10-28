@@ -2,10 +2,12 @@ import Foundation
 import Darwin
 
 enum ProviderTools {
-    static func executable(_ name: String) -> String? {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let directories = ["\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin"]
-            + (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map(String.init)
+    static func executable(_ name: String,
+                           home: String = FileManager.default.homeDirectoryForCurrentUser.path,
+                           environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {
+        let miseData = environment["MISE_DATA_DIR"] ?? "\(environment["XDG_DATA_HOME"] ?? "\(home)/.local/share")/mise"
+        let directories = ["\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "\(miseData)/shims"]
+            + (environment["PATH"] ?? "").split(separator: ":").map(String.init)
         return directories.map { "\($0)/\(name)" }
             .first { $0.hasPrefix("/") && FileManager.default.isExecutableFile(atPath: $0) }
     }
