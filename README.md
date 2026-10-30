@@ -17,7 +17,7 @@ Every push to `main` builds the disk image in GitHub Actions and publishes it as
 
 ## Updates
 
-Orbit checks for a newer stable release on startup and every 24 hours while running, including after waking from sleep. **Check for updates** retries immediately. Checks use GitHub's public API without authentication. Network failures appear beside the update button without interrupting usage refreshes.
+Orbit checks for a newer stable release on startup and every 24 hours while running, including after waking from sleep. **Check for updates** retries immediately. Checks use GitHub's public API without authentication. Network failures appear at the top of the footer's settings menu without interrupting usage refreshes; an available update also shows an **Update to** button in the footer.
 
 When available, **Update & restart** downloads the release disk image over HTTPS from the public GitHub release, verifies GitHub's SHA-256 asset digest, checks the bundled app identity, version and code signature, then stages it beside the installed app. Orbit quits, replaces the app and relaunches at the same path. The installer restores the previous app if replacement or the launch request fails. It requires a writable app and parent folder; move the app out of its disk image into Applications first. No administrator prompt is requested. A successful launch request does not detect subsequent crashes.
 
@@ -29,9 +29,9 @@ Start at login (LaunchAgent that opens `build/Orbit.app`; `--remove` uninstalls)
 
     ./scripts/install-login-item.sh
 
-Native AppKit menu bar app with a SwiftUI galaxy dashboard: moving, twinkling stars, a drifting spiral nebula, an opaque space-black backdrop, dark provider cards and flowing quota meters. Rockets fly along the bar when quota usage increases and when the popover opens. No Dock icon. It refreshes every 5 minutes and when you open the popover (at most once a minute). Claude requests reuse a five-minute in-memory cache; refreshes and popover opens respect its rate-limit cooldown. Animations pause when closed and respect macOS Reduce Motion. Escape or an outside click dismisses the popover; Command-R refreshes and Command-Q quits.
+Native AppKit menu bar app with a minimal black SwiftUI dashboard: one compact card per provider with session and weekly meters, a refresh button in the header, and a footer showing the last update next to a settings menu (updates, size, connect providers, privacy, quit). Rockets fly along the bar when quota usage increases and when the popover opens. No Dock icon. It refreshes every 5 minutes and when you open the popover (at most once a minute). Claude requests reuse a five-minute in-memory cache; refreshes and popover opens respect its rate-limit cooldown. Animations pause when closed and respect macOS Reduce Motion. Escape or an outside click dismisses the popover; Command-R refreshes and Command-Q quits.
 
-The dashboard grows to fit its cards, including connection errors, within the current display's usable area. The footer's Size menu offers Normal (100%), Larger (115%), and Largest (130%) and remembers the selection. On shorter displays, the cards remain scrollable without a visible scrollbar; the header and footer stay accessible.
+The dashboard grows to fit its cards, including connection errors, within the current display's usable area. The settings menu's Size option offers Normal (100%), Larger (115%), and Largest (130%) and remembers the selection. On shorter displays, the cards remain scrollable without a visible scrollbar; the header and footer stay accessible.
 
 Click a provider's name and external-link icon to open its dashboard in your default browser: Claude at `claude.ai`, Codex at `chatgpt.com/codex`, or Antigravity Remote Control at `antigravity.google.com`. Links remain available while connecting or when quota refresh fails.
 
@@ -52,7 +52,7 @@ Drop official logos into `Resources/logos/` as `claude`, `codex`, or `antigravit
 
 ## Connecting providers
 
-If the initial account check finds a missing login, opening Orbit shows **Connect your providers**. The footer’s **Connect providers** button reopens it at any time. Install the provider CLI through the linked official instructions, then use **Copy command & open Terminal** and paste the command:
+If the initial account check finds a missing login, opening Orbit shows **Connect your providers**. **Connect providers…** in the footer's settings menu reopens it at any time. Install the provider CLI through the linked official instructions, then use **Copy command & open Terminal** and paste the command:
 
 - Claude: `claude auth login`, using your Claude subscription.
 - Codex: `codex login`, choosing **Sign in with ChatGPT**. API keys have no subscription quota windows.
