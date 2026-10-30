@@ -21,13 +21,16 @@ final class GalaxyModel: ObservableObject {
     @Published var refreshedAt: Date?
     @Published var visible = false
     @Published var panelScale = PanelScale(rawValue: UserDefaults.standard.string(forKey: "panelSize") ?? "") ?? .normal
-    @Published var panelSize = NSSize(width: 380, height: 700)
+    @Published var panelSize = NSSize(width: 340, height: 600)
     @Published var showingConnections = false
 }
 
 private enum Galaxy {
+    // T3 Black neutrals; provider accents stay as data color on logos and bars.
     static let ink = Color.black
-    static let muted = Color(red: 0.66, green: 0.69, blue: 0.79)
+    static let surface = Color(red: 0.04, green: 0.04, blue: 0.04)
+    static let line = Color.white.opacity(0.07)
+    static let muted = Color.white.opacity(0.5)
     static func accent(_ provider: Provider) -> Color {
         switch provider {
         case .claude: return Color(red: 1, green: 0.64, blue: 0.46)
@@ -38,7 +41,7 @@ private enum Galaxy {
 }
 
 struct GalaxyPanel: View {
-    static let width: CGFloat = 380
+    static let width: CGFloat = 340
     @ObservedObject var model: GalaxyModel
     @ObservedObject var updater = AppUpdater()
     let refresh: () -> Void
@@ -48,33 +51,22 @@ struct GalaxyPanel: View {
     private var scale: CGFloat { measuring ? 1 : model.panelSize.width / Self.width }
 
     var body: some View {
-        ZStack {
-            Galaxy.ink
-            Starfield(active: !measuring && model.visible && !reduceMotion)
-            VStack(alignment: .leading, spacing: 12) {
-                header
-                HStack(spacing: 6) {
-                    Circle().fill(model.refreshing ? Color.orange : Color.mint).frame(width: 5, height: 5)
-                    Text(model.refreshing ? "SYNCING YOUR UNIVERSE" : "YOUR USAGE, IN ORBIT")
-                        .font(.system(size: 9, weight: .semibold)).tracking(1.7)
-                        .foregroundStyle(Galaxy.muted)
-                    Spacer()
-                    Text("3 PROVIDERS").font(.system(size: 9, weight: .medium)).foregroundStyle(Galaxy.muted)
+        VStack(alignment: .leading, spacing: 10) {
+            header
+            if measuring {
+                cards
+            } else {
+                ViewThatFits(in: .vertical) {
+                    cards.fixedSize(horizontal: false, vertical: true)
+                    ScrollView(showsIndicators: false) { cards }
                 }
-                if measuring {
-                    cards
-                } else {
-                    ViewThatFits(in: .vertical) {
-                        cards.fixedSize(horizontal: false, vertical: true)
-                        ScrollView(showsIndicators: false) { cards }
-                    }
-                }
-                footer
             }
-            .padding(22)
+            footer
         }
-        .frame(width: Self.width, height: measuring ? nil : model.panelSize.height / scale)
+        .padding(14)
+        .frame(width: Self.width, height: measuring ? nil : model.panelSize.height / scale, alignment: .top)
         .fixedSize(horizontal: false, vertical: measuring)
+        .background(Galaxy.ink)
         .scaleEffect(scale)
         .frame(width: measuring ? Self.width : model.panelSize.width,
                height: measuring ? nil : model.panelSize.height)
@@ -86,13 +78,13 @@ struct GalaxyPanel: View {
     }
 
     private var cards: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             ForEach(Array(Provider.allCases.enumerated()), id: \.offset) { index, provider in
                 ProviderCard(provider: provider, usage: model.usage[provider], active: !measuring && model.visible && !reduceMotion,
                              connect: { model.showingConnections = true })
                     .opacity(measuring || model.visible || !model.usage.isEmpty ? 1 : 0)
-                    .offset(y: measuring || model.visible || !model.usage.isEmpty ? 0 : 8)
-                    .animation(reduceMotion || measuring ? nil : .easeOut(duration: 0.35).delay(Double(index) * 0.06), value: model.visible)
+                    .offset(y: measuring || model.visible || !model.usage.isEmpty ? 0 : 6)
+                    .animation(reduceMotion || measuring ? nil : .easeOut(duration: 0.25).delay(Double(index) * 0.05), value: model.visible)
             }
         }
         .padding(1)
@@ -106,77 +98,51 @@ struct GalaxyPanel: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Orbit").font(.system(size: 27, weight: .semibold, design: .rounded)).tracking(-0.7)
-                Text("A little space for your limits.").font(.system(size: 11)).foregroundStyle(Galaxy.muted)
-            }
+        HStack(spacing: 7) {
+            Image(nsImage: StatusIcon.image()).resizable().frame(width: 14, height: 14)
+                .foregroundStyle(Galaxy.muted).accessibilityHidden(true)
+            Text("Orbit").font(.system(size: 13, weight: .semibold))
             Spacer()
-            ZStack {
-                Circle().stroke(Color.white.opacity(0.16), lineWidth: 1).frame(width: 48, height: 48)
-                Ellipse().stroke(Color.purple.opacity(0.7), lineWidth: 1).frame(width: 58, height: 20).rotationEffect(.degrees(-35))
-                Image(systemName: "sparkles").font(.system(size: 21)).foregroundStyle(Color(red: 0.8, green: 0.72, blue: 1))
+            Button(action: refresh) {
+                Image(systemName: "arrow.clockwise").font(.system(size: 11, weight: .semibold))
+                    .frame(width: 26, height: 26)
+                    .background(Galaxy.surface, in: Circle())
+                    .overlay(Circle().stroke(Galaxy.line))
+                    .contentShape(Circle())
             }
-            .accessibilityHidden(true)
-        }.padding(.bottom, 4)
+            .buttonStyle(.plain).disabled(model.refreshing).opacity(model.refreshing ? 0.4 : 1)
+            .keyboardShortcut("r")
+            .help("Fetch the latest usage from all providers")
+            .accessibilityLabel("Refresh")
+        }
     }
 
     private var footer: some View {
-        VStack(spacing: 12) {
-            HStack {
-                Text(updater.message).font(.system(size: 9)).foregroundStyle(Galaxy.muted)
-                    .lineLimit(2).help(updater.message)
-                Spacer()
+        HStack(spacing: 6) {
+            Circle().fill(model.refreshing ? Color.orange : Color.green).frame(width: 5, height: 5)
+                .accessibilityHidden(true)
+            Text(updater.busy ? updater.message
+                 : model.refreshing ? "Refreshing…"
+                 : model.refreshedAt.map { "Updated \(Format.clockTime($0))" } ?? "Waiting for first update")
+                .lineLimit(1).truncationMode(.middle)
+            if let release = updater.release, !updater.busy {
+                Button("Update to \(release.version)") { updater.install() }
+                    .buttonStyle(.plain).foregroundStyle(.white)
+                    .help("Downloads, installs and restarts Orbit")
+            }
+            Spacer()
+            Menu {
+                Text(updater.message)
                 Button(updater.release == nil ? "Check for updates" : "Update & restart") {
                     if updater.release == nil { updater.checkIfDue(force: true) }
                     else { updater.install() }
                 }
-                .font(.system(size: 10, weight: .medium)).buttonStyle(.plain)
                 .disabled(updater.busy)
-                .help("Checks the private GitHub repository; updates download, install and restart Orbit")
-            }
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(model.refreshing ? "Refreshing…" : model.refreshedAt.map { "Updated \(Format.clockTime($0))" } ?? "Waiting for first update")
-                        .font(.system(size: 10, weight: .medium))
-                    Text("Auto-refresh every 5 minutes").font(.system(size: 9)).foregroundStyle(Galaxy.muted)
+                Divider()
+                Picker("Size", selection: Binding(get: { model.panelScale }, set: { resize($0) })) {
+                    ForEach(PanelScale.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
-                Spacer()
-                Button(action: refresh) {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                        .font(.system(size: 11, weight: .medium)).padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(Color.white.opacity(0.07), in: Capsule())
-                        .overlay(Capsule().stroke(Color.white.opacity(0.1)))
-                }
-                .buttonStyle(.plain).disabled(model.refreshing).keyboardShortcut("r")
-                .help("Fetch the latest usage from all providers")
-            }
-            HStack {
-                Menu {
-                    ForEach(PanelScale.allCases, id: \.self) { size in
-                        Button {
-                            resize(size)
-                        } label: {
-                            if size == model.panelScale {
-                                Label(size.title, systemImage: "checkmark")
-                            } else {
-                                Text(size.title)
-                            }
-                        }
-                    }
-                } label: {
-                    Label("Size", systemImage: "arrow.up.left.and.arrow.down.right")
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help("Change the dashboard size")
-                Spacer()
-                Text("LOCAL APP · NO ANALYTICS").font(.system(size: 8)).tracking(1)
-            }
-            .font(.system(size: 9)).foregroundStyle(Galaxy.muted)
-            HStack {
-                Button("Connect providers") { model.showingConnections = true }
-                Spacer()
+                Button("Connect providers…") { model.showingConnections = true }
                 Button("Privacy") {
                     if let url = Bundle.main.url(forResource: "Privacy", withExtension: "txt") {
                         NSWorkspace.shared.open(url)
@@ -184,11 +150,19 @@ struct GalaxyPanel: View {
                         NSWorkspace.shared.open(URL(string: "https://github.com/pkielblock/orbit/blob/main/Resources/Privacy.txt")!)
                     }
                 }
-                Spacer()
-                Button("Quit") { NSApp.terminate(nil) }.keyboardShortcut("q")
+                Divider()
+                Button("Quit Orbit") { NSApp.terminate(nil) }
+            } label: {
+                Image(systemName: "slider.horizontal.3").font(.system(size: 11, weight: .medium))
             }
-            .font(.system(size: 9)).foregroundStyle(Galaxy.muted).buttonStyle(.plain)
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .help("Settings")
+            .accessibilityLabel("Settings")
         }
+        .font(.system(size: 10)).foregroundStyle(Galaxy.muted)
+        .padding(.horizontal, 2)
+        // Menu items don't own shortcuts while closed, so Command-Q needs a live (invisible) button.
+        .background(Button("Quit") { NSApp.terminate(nil) }.keyboardShortcut("q").opacity(0).accessibilityHidden(true))
     }
 }
 
@@ -200,25 +174,27 @@ private struct ProviderCard: View {
     private var accent: Color { Galaxy.accent(provider) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 9) {
-                Image(nsImage: Logos.image(for: provider, height: 18))
-                    .resizable().frame(width: 18, height: 18).foregroundStyle(accent)
-                    .padding(7).background(accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 7) {
+                Image(nsImage: Logos.image(for: provider, height: 14))
+                    .resizable().frame(width: 14, height: 14).foregroundStyle(accent)
                     .accessibilityHidden(true)
                 Link(destination: provider.dashboardURL) {
-                    HStack(spacing: 4) {
-                        Text(provider.name).font(.system(size: 13, weight: .semibold))
-                        Image(systemName: "arrow.up.right").font(.system(size: 9, weight: .semibold))
+                    HStack(spacing: 3) {
+                        Text(provider.name).font(.system(size: 12, weight: .semibold))
+                        Image(systemName: "arrow.up.right").font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(Galaxy.muted)
                     }
                 }
                 .buttonStyle(.plain)
                 .help("Open \(provider.name) dashboard in your browser")
                 .accessibilityLabel("Open \(provider.name) dashboard in your browser")
                 Spacer()
-                Text(usage == nil ? "CONNECTING" : usage?.error != nil ? "CHECK CONNECTION" : "CONNECTED")
-                    .font(.system(size: 8, weight: .semibold)).tracking(0.8)
-                    .foregroundStyle(usage?.error != nil ? Color.orange : accent)
+                if usage == nil {
+                    Text("Connecting…").font(.system(size: 10)).foregroundStyle(Galaxy.muted)
+                } else if usage?.error != nil {
+                    Text("Check connection").font(.system(size: 10, weight: .medium)).foregroundStyle(Color.orange)
+                }
             }
             UsageMeter(title: "Session", window: usage?.session, accent: accent, active: active)
             UsageMeter(title: "Weekly", window: usage?.weekly, accent: accent, active: active)
@@ -236,10 +212,10 @@ private struct ProviderCard: View {
                     .font(.system(size: 9)).foregroundStyle(Galaxy.muted)
             }
         }
-        .padding(10)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(red: 0.025, green: 0.03, blue: 0.055)))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(LinearGradient(colors: [accent.opacity(0.3), Color.white.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing)))
+        .background(Galaxy.surface, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Galaxy.line))
     }
 }
 
@@ -253,26 +229,24 @@ private struct UsageMeter: View {
     private var tint: Color { (percent ?? 0) >= 90 ? .red : (percent ?? 0) >= 70 ? .orange : accent }
 
     var body: some View {
-        VStack(spacing: 4) {
-            HStack {
-                Text(title).font(.system(size: 10, weight: .medium)).foregroundStyle(Galaxy.muted)
-                Spacer()
-                Text(Format.percent(percent)).font(.system(size: 11, weight: .semibold, design: .monospaced))
-                Text("used").font(.system(size: 9)).foregroundStyle(Galaxy.muted)
-            }
-            OrbitBar(fraction: fraction, tint: tint, active: active)
-                .frame(height: 12)
-            HStack {
-                Text(percent == nil ? "Quota not reported" : Format.reset(window?.resetsAt))
-                    .font(.system(size: 9)).foregroundStyle(Galaxy.muted)
+        VStack(spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                Text(title).font(.system(size: 10, weight: .medium))
+                Text(percent == nil ? "not reported" : Format.reset(window?.resetsAt))
+                    .font(.system(size: 9)).foregroundStyle(Galaxy.muted).lineLimit(1)
                 Spacer()
                 if (percent ?? 0) >= 90 {
-                    Text("Near limit").font(.system(size: 9, weight: .medium)).foregroundStyle(tint)
+                    Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 8)).foregroundStyle(tint)
+                        .help("Near limit")
                 }
+                Text(Format.percent(percent)).font(.system(size: 11, weight: .semibold).monospacedDigit())
+                    .foregroundStyle((percent ?? 0) >= 70 ? tint : .white)
             }
+            OrbitBar(fraction: fraction, tint: tint, active: active)
+                .frame(height: 10)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(title), \(Format.percent(percent)) used, \(Format.reset(window?.resetsAt))")
+        .accessibilityLabel("\(title), \(Format.percent(percent)) used, \(Format.reset(window?.resetsAt))\((percent ?? 0) >= 90 ? ", near limit" : "")")
     }
 }
 
@@ -312,26 +286,17 @@ private struct OrbitBar: View {
                 let progress = min(max(timeline.date.timeIntervalSince(began) / duration, 0), 1)
                 let current = active ? start + (end - start) * progress * progress * (3 - 2 * progress) : fraction
                 let width = size.width * current
-                let track = CGRect(x: 0, y: 4, width: size.width, height: 4)
-                context.fill(Path(roundedRect: track, cornerRadius: 2), with: .color(.white.opacity(0.09)))
+                let track = CGRect(x: 0, y: 3, width: size.width, height: 4)
+                context.fill(Path(roundedRect: track, cornerRadius: 2), with: .color(.white.opacity(0.08)))
                 if width > 0 {
-                    let fill = Path(roundedRect: CGRect(x: 0, y: 4, width: width, height: 4), cornerRadius: 2)
+                    let fill = Path(roundedRect: CGRect(x: 0, y: 3, width: width, height: 4), cornerRadius: 2)
                     context.fill(fill, with: .linearGradient(Gradient(colors: [tint.opacity(0.55), tint]), startPoint: .zero, endPoint: CGPoint(x: width, y: 0)))
-                    if active {
-                        var sheen = context
-                        sheen.clip(to: fill)
-                        let phase = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.8) / 2.8
-                        let x = phase * (width + 60) - 30
-                        sheen.fill(Path(CGRect(x: x - 24, y: 3, width: 48, height: 6)), with: .linearGradient(
-                            Gradient(colors: [.clear, .white.opacity(0.7), .clear]),
-                            startPoint: CGPoint(x: x - 24, y: 0), endPoint: CGPoint(x: x + 24, y: 0)))
-                    }
                 }
                 let elapsed = timeline.date.timeIntervalSince(began)
                 if active && end > start && elapsed >= 0 && elapsed < duration {
                     var rocket = context
                     rocket.opacity = min(1, (duration - elapsed) / 0.2)
-                    rocket.translateBy(x: min(max(width, 10), size.width - 10), y: 6)
+                    rocket.translateBy(x: min(max(width, 10), size.width - 10), y: 5)
                     let flicker = 2 + sin(elapsed * 50) * 1.5
                     var flame = Path()
                     flame.move(to: CGPoint(x: -5, y: -2))
@@ -359,51 +324,5 @@ private struct OrbitBar: View {
             transition(to: fraction, from: visible ? 0 : fraction)
         }
         .accessibilityHidden(true)
-    }
-}
-
-/// Nebula clouds, spiral dust and stars move together only while the popover is visible.
-private struct Starfield: View {
-    let active: Bool
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !active)) { timeline in
-            let time = active ? timeline.date.timeIntervalSinceReferenceDate : 0
-            Canvas { context, size in
-                for index in 0..<3 {
-                    let phase = time * 0.14 + Double(index) * 2.1
-                    let center = CGPoint(x: size.width * (0.5 + sin(phase) * 0.3), y: size.height * (0.35 + cos(phase * 0.8) * 0.25))
-                    let radius = 180.0 + sin(phase) * 35
-                    let color: Color = index == 0 ? .purple : index == 1 ? .blue : .pink
-                    context.fill(Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)), with: .radialGradient(
-                        Gradient(colors: [color.opacity(0.32), color.opacity(0.08), .clear]),
-                        center: center, startRadius: 0, endRadius: radius))
-                }
-                // A slowly rotating spiral gives the nebula depth rather than a flat gradient.
-                let center = CGPoint(x: size.width * 0.7, y: size.height * 0.3)
-                for index in 0..<180 {
-                    let distance = Double(index % 60) * 3
-                    let angle = distance * 0.035 + Double(index / 60) * 2.094 + time * 0.045
-                    let point = CGPoint(x: center.x + cos(angle) * distance, y: center.y + sin(angle) * distance * 0.55)
-                    context.fill(Path(ellipseIn: CGRect(x: point.x, y: point.y, width: 2, height: 2)), with: .color(Color.purple.opacity(0.18)))
-                }
-                for index in 0..<85 {
-                    let speed = Double(index % 3 + 1)
-                    let x = (Double((index * 73 + 19) % 379) / 379 * size.width + time * speed * 1.5).truncatingRemainder(dividingBy: size.width)
-                    let y = (Double((index * 137 + 31) % 659) / 659 * size.height + time * speed * 0.5).truncatingRemainder(dividingBy: size.height)
-                    let radius: Double = index % 7 == 0 ? 1.5 : 0.7
-                    let opacity = 0.2 + (sin(time * 1.4 + Double(index)) + 1) * 0.25
-                    context.fill(Path(ellipseIn: CGRect(x: x, y: y, width: radius * 2, height: radius * 2)), with: .color(.white.opacity(opacity)))
-                    if index % 17 == 0 {
-                        var sparkle = Path()
-                        sparkle.move(to: CGPoint(x: x + radius, y: y - 3))
-                        sparkle.addLine(to: CGPoint(x: x + radius, y: y + 5))
-                        sparkle.move(to: CGPoint(x: x - 3, y: y + radius))
-                        sparkle.addLine(to: CGPoint(x: x + 5, y: y + radius))
-                        context.stroke(sparkle, with: .color(.white.opacity(opacity * 0.5)), lineWidth: 0.6)
-                    }
-                }
-            }
-        }
-        .allowsHitTesting(false).accessibilityHidden(true)
     }
 }
