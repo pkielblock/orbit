@@ -85,7 +85,7 @@ extension Locale {
 enum StatusIcon {
     static func image() -> NSImage {
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
-            GalaxyIcon.draw(in: rect, colored: false)
+            GalaxyIcon.draw(in: rect)
             return true
         }
         image.isTemplate = true

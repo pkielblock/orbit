@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo.png" width="128" alt="Orbit"></p>
+
 # Orbit
 
 macOS menu bar app showing session and weekly usage for Claude, Codex, and Antigravity, with reset times.

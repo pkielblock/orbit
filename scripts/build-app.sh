@@ -1,13 +1,12 @@
 #!/bin/sh
-# Builds Orbit.app, including its galaxy icon, translations and bundled provider logos.
+# Builds Orbit.app, including its app icon, translations and bundled provider logos.
 set -e
 cd "$(dirname "$0")/.."
 OUT=build/Orbit.app
 rm -rf "$OUT"
 mkdir -p "$OUT/Contents/MacOS" "$OUT/Contents/Resources/logos"
-swiftc -O -o build/generate-icons Sources/Orbit/GalaxyIcon.swift scripts/icons/main.swift
-build/generate-icons build/AppIcon.iconset
-iconutil -c icns build/AppIcon.iconset -o "$OUT/Contents/Resources/AppIcon.icns"
+swiftc -o build/icon scripts/icon.swift
+build/icon "$OUT/Contents/Resources/AppIcon.icns"
 swiftc -O -o "$OUT/Contents/MacOS/Orbit" Sources/Orbit/*.swift
 cp Resources/Privacy.txt "$OUT/Contents/Resources/Privacy.txt"
 cp -R Localization/*.lproj "$OUT/Contents/Resources/"

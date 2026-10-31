@@ -1,8 +1,8 @@
 import AppKit
 
-/// Shared spiral galaxy artwork for the app bundle and menu bar.
+/// Spiral galaxy for the menu bar, drawn white so it works as a template image.
 enum GalaxyIcon {
-    static func draw(in rect: NSRect, colored: Bool) {
+    static func draw(in rect: NSRect) {
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }
         let transform = NSAffineTransform()
@@ -10,16 +10,6 @@ enum GalaxyIcon {
         transform.scale(by: rect.width / 24)
         transform.concat()
 
-        if colored {
-            let background = NSBezierPath(roundedRect: NSRect(x: 1, y: 1, width: 22, height: 22), xRadius: 5, yRadius: 5)
-            NSGradient(starting: NSColor(calibratedRed: 0.12, green: 0.08, blue: 0.28, alpha: 1),
-                       ending: NSColor(calibratedRed: 0.02, green: 0.03, blue: 0.10, alpha: 1))!
-                .draw(in: background, angle: -90)
-            let inset = NSAffineTransform()
-            inset.translateX(by: 3, yBy: 3)
-            inset.scale(by: 0.75)
-            inset.concat()
-        }
 
         // Opposite arms share the same geometry, keeping the small silhouette recognizable.
         for arm in 0..<2 {
@@ -34,16 +24,11 @@ enum GalaxyIcon {
             }
             path.lineWidth = 2.2
             path.lineCapStyle = .round
-            if colored {
-                (arm == 0 ? NSColor(calibratedRed: 0.40, green: 0.78, blue: 1, alpha: 1)
-                          : NSColor(calibratedRed: 0.78, green: 0.43, blue: 1, alpha: 1)).setStroke()
-            } else {
-                NSColor.white.setStroke()
-            }
+            NSColor.white.setStroke()
             path.stroke()
         }
 
-        (colored ? NSColor(calibratedRed: 1, green: 0.89, blue: 0.69, alpha: 1) : .white).setFill()
+        NSColor.white.setFill()
         NSBezierPath(ovalIn: NSRect(x: 9.6, y: 9.6, width: 4.8, height: 4.8)).fill()
         for star in [NSRect(x: 4, y: 18, width: 1.8, height: 1.8),
                      NSRect(x: 18.5, y: 3.5, width: 1.5, height: 1.5)] {
