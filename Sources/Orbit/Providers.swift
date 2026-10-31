@@ -13,9 +13,9 @@ enum UsageError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .missing(let what): return "\(what) not found"
+        case .missing(let what): return String(localized: "\(NSLocalizedString(what, comment: "")) not found")
         case .http(let code): return "HTTP \(code)"
-        case .badData(let what): return "unexpected \(what)"
+        case .badData(let what): return String(localized: "unexpected \(NSLocalizedString(what, comment: ""))")
         }
     }
 }
@@ -69,10 +69,10 @@ actor ClaudeSource: UsageSource {
                 rateLimitFailures += 1
                 let header = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")
                 nextFetchAt = now().addingTimeInterval(Self.retryDelay(header, failures: rateLimitFailures, now: now()))
-                return failure("Usage endpoint rate limited; retry after \(Format.clockTime(nextFetchAt))")
+                return failure(String(localized: "Usage endpoint rate limited; retry after \(Format.clockTime(nextFetchAt))"))
             }
             if status == 401 || status == 403 {
-                return failure("Claude sign-in expired or lacks usage access", needsConnection: true)
+                return failure(String(localized: "Claude sign-in expired or lacks usage access"), needsConnection: true)
             }
             guard status == 200 else { throw UsageError.http(status) }
             guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -87,10 +87,10 @@ actor ClaudeSource: UsageSource {
             nextFetchAt = now().addingTimeInterval(300)
             return result
         } catch UsageError.missing {
-            return failure("Claude login not found", needsConnection: true)
+            return failure(String(localized: "Claude login not found"), needsConnection: true)
         } catch {
             // Never surface response bodies, credentials or local paths in errors.
-            return failure((error as? UsageError)?.description ?? "Could not fetch Claude usage")
+            return failure((error as? UsageError)?.description ?? String(localized: "Could not fetch Claude usage"))
         }
     }
 
@@ -169,7 +169,7 @@ struct CodexSource: UsageSource {
         } catch UsageError.missing(let message) {
             return ProviderUsage(provider: provider, error: message, needsConnection: true)
         } catch {
-            return ProviderUsage(provider: provider, error: (error as? UsageError)?.description ?? "Could not fetch Codex account quotas")
+            return ProviderUsage(provider: provider, error: (error as? UsageError)?.description ?? String(localized: "Could not fetch Codex account quotas"))
         }
     }
 
@@ -211,10 +211,10 @@ struct AntigravitySource: UsageSource {
 
     func fetch() async -> ProviderUsage {
         guard let agy = ProviderTools.executable("agy") else {
-            return ProviderUsage(provider: provider, error: "agy not found", needsConnection: true)
+            return ProviderUsage(provider: provider, error: String(localized: "agy not found"), needsConnection: true)
         }
         guard let out = Shell.run(agy, ["-p", "/usage", "--print-timeout", "30s"], timeout: 35) else {
-            return ProviderUsage(provider: provider, error: "agy /usage failed; check sign-in in Antigravity", needsConnection: true)
+            return ProviderUsage(provider: provider, error: String(localized: "agy /usage failed; check sign-in in Antigravity"), needsConnection: true)
         }
         var session: UsageWindow?
         var weekly: UsageWindow?
@@ -226,7 +226,7 @@ struct AntigravitySource: UsageSource {
             if cols[1].contains("Weekly") { weekly = busier(weekly, window) }
         }
         guard session != nil || weekly != nil else {
-            return ProviderUsage(provider: provider, error: "no quota in agy output", updatedAt: Date())
+            return ProviderUsage(provider: provider, error: String(localized: "no quota in agy output"), updatedAt: Date())
         }
         return ProviderUsage(provider: provider, session: session, weekly: weekly, error: nil, updatedAt: Date())
     }

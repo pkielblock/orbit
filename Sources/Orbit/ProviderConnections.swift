@@ -10,20 +10,20 @@ struct ProviderConnections: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Connect your providers").font(.title2.weight(.semibold))
+            Text("Connect your providers").font(.system(size: 18, weight: .medium))
             Text("Orbit uses accounts signed in through your provider tools. Complete sign-in, then check connections.")
-                .font(.callout).foregroundStyle(.secondary)
+                .font(.system(size: 13)).foregroundStyle(.secondary)
             ForEach(Array(Provider.allCases.enumerated()), id: \.offset) { _, provider in
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text(provider.name).font(.headline)
+                        Text(provider.name).font(.system(size: 15, weight: .medium))
                         Spacer()
-                        Text(status(provider)).font(.caption).foregroundStyle(.secondary)
+                        Text(status(provider)).font(.system(size: 11)).foregroundStyle(.secondary)
                     }
-                    Text(instructions(provider)).font(.caption).fixedSize(horizontal: false, vertical: true)
+                    Text(instructions(provider)).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
                     if let command = command(provider) {
-                        Text(command).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-                        Button(copied == provider ? "Copied — paste in Terminal" : "Copy command & open Terminal") {
+                        Text(command).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
+                        Button(copied == provider ? String(localized: "Copied, paste it in Terminal") : String(localized: "Copy command and open Terminal")) {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(command, forType: .string)
                             copied = provider
@@ -31,20 +31,20 @@ struct ProviderConnections: View {
                                 NSWorkspace.shared.openApplication(at: url, configuration: .init())
                             }
                         }
-                        .font(.caption.weight(.medium)).foregroundStyle(Galaxy.accentText)
+                        .font(.system(size: 12, weight: .medium)).foregroundStyle(Galaxy.accentText)
                     }
-                    Link("Installation & sign-in help", destination: helpURL(provider)).font(.caption).foregroundStyle(.secondary)
+                    Link("Installation and sign-in help", destination: helpURL(provider)).font(.system(size: 12)).foregroundStyle(.secondary)
                 }
-                .padding(12).background(Galaxy.card, in: RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Galaxy.hairline))
+                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Galaxy.card, in: RoundedRectangle(cornerRadius: 12))
             }
             HStack {
-                Button(model.refreshing ? "Checking…" : "Check connections", action: refresh).disabled(model.refreshing)
+                Button(model.refreshing ? String(localized: "Checking…") : String(localized: "Check connections"), action: refresh).disabled(model.refreshing)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button { dismiss() } label: {
                     Text("Done").fontWeight(.medium).padding(.horizontal, 16).frame(height: 28)
-                        .background(Galaxy.accent, in: RoundedRectangle(cornerRadius: 8))
+                        .background(Galaxy.accent, in: Capsule())
                 }
                 .keyboardShortcut(.defaultAction)
             }
@@ -55,16 +55,16 @@ struct ProviderConnections: View {
     }
 
     private func status(_ provider: Provider) -> String {
-        guard let usage = model.usage[provider] else { return "Not checked" }
-        if usage.needsConnection { return "Sign-in needed" }
-        return usage.error == nil ? "Connected" : "Check connection"
+        guard let usage = model.usage[provider] else { return String(localized: "Not checked") }
+        if usage.needsConnection { return String(localized: "Sign-in needed") }
+        return usage.error == nil ? String(localized: "Connected") : String(localized: "Check connection")
     }
 
     private func instructions(_ provider: Provider) -> String {
         switch provider {
-        case .claude: return "Install Claude Code if needed. Run this command and sign in with your Claude subscription. Allow Keychain access when prompted."
-        case .codex: return "Install Codex CLI if needed. Run this command and choose Sign in with ChatGPT. An API key does not provide subscription quotas."
-        case .antigravity: return "Install Antigravity CLI if needed. Run agy and complete interactive sign-in. Orbit then reads your account quotas through /usage."
+        case .claude: return String(localized: "Install Claude Code if needed. Run this command and sign in with your Claude subscription. Allow Keychain access when prompted.")
+        case .codex: return String(localized: "Install Codex CLI if needed. Run this command and choose Sign in with ChatGPT. An API key does not provide subscription quotas.")
+        case .antigravity: return String(localized: "Install Antigravity CLI if needed. Run agy and complete interactive sign-in. Orbit then reads your account quotas through /usage.")
         }
     }
 

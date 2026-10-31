@@ -36,12 +36,14 @@ enum Logos {
 enum Format {
     private static let clock: DateFormatter = {
         let f = DateFormatter()
+        f.locale = .app
         f.dateFormat = "HH:mm"
         return f
     }()
 
     private static let weekday: DateFormatter = {
         let f = DateFormatter()
+        f.locale = .app
         f.dateFormat = "EEE HH:mm"
         return f
     }()
@@ -57,19 +59,26 @@ enum Format {
 
     /// "in 2h 13m (14:30)" within a day, "Mon 14:30" beyond that.
     static func reset(_ date: Date?) -> String {
-        guard let date else { return "reset unknown" }
+        guard let date else { return String(localized: "reset unknown") }
         let seconds = date.timeIntervalSinceNow
-        if seconds <= 0 { return "resetting now" }
+        if seconds <= 0 { return String(localized: "resetting now") }
         if seconds < 86_400 {
             let h = Int(seconds) / 3600
             let m = (Int(seconds) % 3600) / 60
             let rel = h > 0 ? "\(h)h \(m)m" : "\(m)m"
-            return "resets in \(rel) (\(clock.string(from: date)))"
+            return String(localized: "resets in \(rel) (\(clock.string(from: date)))")
         }
-        return "resets \(weekday.string(from: date))"
+        return String(localized: "resets \(weekday.string(from: date))")
     }
+}
 
-
+extension Locale {
+    /// The language picked in Settings (System, English, Português (Brasil)); read once, the app restarts on change.
+    static let app: Locale = switch UserDefaults.standard.string(forKey: "language") {
+    case "pt-BR": Locale(identifier: "pt_BR")
+    case "en": Locale(identifier: "en_" + (Locale.current.region?.identifier ?? "US"))
+    default: .current
+    }
 }
 
 /// White galaxy silhouette. macOS adapts the template to the menu bar appearance.

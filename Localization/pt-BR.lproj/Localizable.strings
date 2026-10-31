@@ -1,0 +1,103 @@
+/* Português (Brasil). Keys are the English text; %@ is filled in by the app. */
+
+/* Panel */
+"Refresh" = "Atualizar";
+"Fetch the latest usage from all providers" = "Buscar o uso mais recente de todos os provedores";
+"Settings" = "Ajustes";
+"Update available" = "Atualização disponível";
+"Refreshing…" = "Atualizando…";
+"Updated %@" = "Atualizado às %@";
+"Waiting for first update" = "Aguardando a primeira atualização";
+"Open %@ dashboard in your browser" = "Abrir o painel do %@ no navegador";
+"Connecting…" = "Conectando…";
+"Check connection" = "Verifique a conexão";
+"Session" = "Sessão";
+"Weekly" = "Semanal";
+"not reported" = "não informado";
+"Near limit" = "Perto do limite";
+"%@, %@ used, %@" = "%1$@, %2$@ usado, %3$@";
+", near limit" = ", perto do limite";
+"Provider error: %@. Displayed quotas may be stale." = "Erro do provedor: %@. As cotas exibidas podem estar desatualizadas.";
+"Connect %@" = "Conectar %@";
+"Quota from %@" = "Cota das %@";
+"reset unknown" = "renovação desconhecida";
+"resetting now" = "renovando agora";
+"resets in %@ (%@)" = "renova em %1$@ (%2$@)";
+"resets %@" = "renova %@";
+"Orbit, open the usage dashboard" = "Orbit, abrir o painel de uso";
+
+/* Settings */
+"Display" = "Exibição";
+"Language" = "Idioma";
+"System" = "Sistema";
+"Orbit restarts to change the language" = "O Orbit reinicia para trocar o idioma";
+"Size" = "Tamanho";
+"Command-= and Command-minus also change the size" = "Command-= e Command-menos também mudam o tamanho";
+"Blur" = "Desfoque";
+"Darkness" = "Escuridão";
+"Providers" = "Provedores";
+"Sign-in for Claude, Codex and Antigravity" = "Login no Claude, Codex e Antigravity";
+"Connect" = "Conectar";
+"About" = "Sobre";
+"Version" = "Versão";
+"Update to %@" = "Atualizar para %@";
+"Check for updates" = "Procurar atualizações";
+"What Orbit reads and sends" = "O que o Orbit lê e envia";
+"Privacy" = "Privacidade";
+"Quit Orbit" = "Sair do Orbit";
+
+/* Updates */
+"Updates checked daily" = "Atualizações verificadas diariamente";
+"Checking for updates…" = "Procurando atualizações…";
+"Version %@ available" = "Versão %@ disponível";
+"Orbit is up to date" = "O Orbit está atualizado";
+"Could not read release information, retry the check" = "Não foi possível ler as informações da versão, tente de novo";
+"Downloading update…" = "Baixando atualização…";
+"Update failed, current app unchanged; retry" = "A atualização falhou, o app atual não mudou; tente de novo";
+"GitHub request failed, check your connection and retry" = "A solicitação ao GitHub falhou, verifique a conexão e tente de novo";
+"Update preparation failed, your current app is unchanged; retry the update" = "A preparação da atualização falhou, o app atual não mudou; tente de novo";
+"Update checksum missing or invalid, current app unchanged" = "Checksum da atualização ausente ou inválido, o app atual não mudou";
+"Move Orbit to a writable Applications folder before updating" = "Mova o Orbit para uma pasta Aplicativos com permissão de escrita antes de atualizar";
+"Release has no Orbit disk image" = "A versão não tem a imagem de disco do Orbit";
+"Downloaded app does not match the release, current app unchanged" = "O app baixado não corresponde à versão, o app atual não mudou";
+"Update helper missing, reinstall Orbit from Releases" = "Assistente de atualização ausente, reinstale o Orbit pela página de versões";
+
+/* Connecting providers */
+"Connect your providers" = "Conecte seus provedores";
+"Orbit uses accounts signed in through your provider tools. Complete sign-in, then check connections." = "O Orbit usa as contas conectadas pelas ferramentas de cada provedor. Faça o login e depois verifique as conexões.";
+"Not checked" = "Não verificado";
+"Sign-in needed" = "Login necessário";
+"Connected" = "Conectado";
+"Install Claude Code if needed. Run this command and sign in with your Claude subscription. Allow Keychain access when prompted." = "Instale o Claude Code se precisar. Rode este comando e entre com sua assinatura do Claude. Permita o acesso às Chaves quando for pedido.";
+"Install Codex CLI if needed. Run this command and choose Sign in with ChatGPT. An API key does not provide subscription quotas." = "Instale o Codex CLI se precisar. Rode este comando e escolha Sign in with ChatGPT. Uma chave de API não tem cotas de assinatura.";
+"Install Antigravity CLI if needed. Run agy and complete interactive sign-in. Orbit then reads your account quotas through /usage." = "Instale o Antigravity CLI se precisar. Rode agy e conclua o login interativo. Depois o Orbit lê as cotas da sua conta pelo /usage.";
+"Copy command and open Terminal" = "Copiar comando e abrir o Terminal";
+"Copied, paste it in Terminal" = "Copiado, cole no Terminal";
+"Installation and sign-in help" = "Ajuda de instalação e login";
+"Check connections" = "Verificar conexões";
+"Checking…" = "Verificando…";
+"Done" = "OK";
+
+/* Provider errors */
+"Usage endpoint rate limited; retry after %@" = "Limite de consultas atingido; nova tentativa após %@";
+"Claude sign-in expired or lacks usage access" = "O login do Claude expirou ou não tem acesso ao uso";
+"Claude login not found" = "Login do Claude não encontrado";
+"Could not fetch Claude usage" = "Não foi possível buscar o uso do Claude";
+"Could not fetch Codex account quotas" = "Não foi possível buscar as cotas da conta do Codex";
+"Install Codex CLI, then sign in with ChatGPT" = "Instale o Codex CLI e entre com o ChatGPT";
+"Sign in to Codex with ChatGPT; API keys have no subscription quotas" = "Entre no Codex com o ChatGPT; chaves de API não têm cotas de assinatura";
+"agy not found" = "agy não encontrado";
+"agy /usage failed; check sign-in in Antigravity" = "agy /usage falhou; verifique o login no Antigravity";
+"no quota in agy output" = "nenhuma cota na saída do agy";
+"%@ not found" = "%@ não encontrado";
+"unexpected %@" = "%@ fora do esperado";
+"Claude login" = "Login do Claude";
+"response" = "resposta";
+"quota windows" = "janelas de cota";
+"Codex quota response" = "resposta de cota do Codex";
+"Codex quota windows" = "janelas de cota do Codex";
+"Codex account response" = "resposta da conta do Codex";
+"Codex account request timed out" = "tempo esgotado na consulta da conta do Codex";
+"Codex app server exited before replying" = "o servidor do Codex saiu antes de responder";
+"oversized Codex account response" = "resposta grande demais da conta do Codex";
+"Codex request failed; check login or update Codex CLI" = "a consulta ao Codex falhou; verifique o login ou atualize o Codex CLI";

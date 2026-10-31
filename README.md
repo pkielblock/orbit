@@ -29,9 +29,9 @@ Start at login (LaunchAgent that opens `build/Orbit.app`; `--remove` uninstalls)
 
     ./scripts/install-login-item.sh
 
-Native AppKit menu bar app with a SwiftUI dashboard styled after Sideline (dark native popover material): each provider gets a title and a card with session and weekly meters, grey until a quota reaches 70% (orange) or 90% (red); the header shows the last update next to refresh and settings buttons. Settings (gear or Command-,) swaps the cards for size, **Blur** (how opaque the popover blur is; all the way left shows the desktop sharp behind the material tint) and **Darkness** (black over it, up to 90%) sliders, the same pair as Sideline, updates, providers, privacy and quit; it closes with the popover. Rockets fly along the bar when quota usage increases and when the popover opens. No Dock icon. It refreshes every 5 minutes and when you open the popover (at most once a minute). Claude requests reuse a five-minute in-memory cache; refreshes and popover opens respect its rate-limit cooldown. Animations pause when closed and respect macOS Reduce Motion. Escape or an outside click dismisses the popover; Command-R refreshes and Command-Q quits.
+Native AppKit menu bar app with a SwiftUI dashboard styled after Sideline (dark native popover material): each provider gets a title and a card with session and weekly meters, grey until a quota reaches 70% (orange) or 90% (red); the header shows the last update next to refresh and settings buttons. Settings (gear or Command-,) cross-fades the cards into a grouped form with **Language** (System, English or Português (Brasil); Orbit restarts to switch), size, **Blur** (how opaque the popover blur is; all the way left shows the desktop sharp behind the material tint) and **Darkness** (black over it, up to 90%) sliders, the same pair as Sideline, updates, providers, privacy and quit; it closes with the popover. Rockets fly along the bar when quota usage increases and when the popover opens. No Dock icon. It refreshes every 5 minutes and when you open the popover (at most once a minute). Claude requests reuse a five-minute in-memory cache; refreshes and popover opens respect its rate-limit cooldown. Animations pause when closed and respect macOS Reduce Motion. Percentages roll when they change. Escape or an outside click dismisses the popover; Command-R refreshes, Command-= and Command-minus change the size, and Command-Q quits.
 
-The dashboard grows to fit its cards, including connection errors, within the current display's usable area. The Size option in Settings offers Normal (100%), Larger (115%), and Largest (130%) and remembers the selection. On shorter displays, the cards remain scrollable without a visible scrollbar; the header stays accessible.
+The dashboard grows to fit its cards, including connection errors, within the current display's usable area. The Size option in Settings offers S (85%), M (100%), L (115%) and XL (130%) of the 460 pt panel and remembers the selection (earlier Normal/Larger/Largest choices carry over as M/L/XL). On shorter displays the cards scroll with an overlay scroll bar that shows only while scrolling, in its own lane clear of the percentages; the header stays put.
 
 Click a provider's name and external-link icon to open its dashboard in your default browser: Claude at `claude.ai`, Codex at `chatgpt.com/codex`, or Antigravity Remote Control at `antigravity.google.com`. Links remain available while connecting or when quota refresh fails.
 
@@ -39,8 +39,12 @@ Render a preview without accessing credentials or provider APIs:
 
     build/Orbit.app/Contents/MacOS/Orbit --snapshot /tmp/orbit-preview.png --demo
 
-Omit `--demo` to render live usage. `--dump` still prints live quota data.
-Add `--size normal`, `--size larger`, or `--size largest` to preview a specific dashboard size without changing the saved preference.
+Omit `--demo` to render live usage. Add `-language pt-BR -AppleLanguages '(pt-BR)'` to render it in Portuguese. `--dump` still prints live quota data.
+Add `--size small`, `--size normal`, `--size larger`, or `--size largest` to preview a specific dashboard size without changing the saved preference.
+
+## Language
+
+Orbit speaks English and Português (Brasil). Settings > Language picks System (the macOS language), English or Português (Brasil) and restarts the app. Translations live in `Localization/pt-BR.lproj/Localizable.strings`, keyed by the English text; `scripts/build-app.sh` copies them into the bundle. Dates and times follow the chosen language.
 
 ## App icon
 
@@ -52,7 +56,7 @@ Drop official logos into `Resources/logos/` as `claude`, `codex`, or `antigravit
 
 ## Connecting providers
 
-If the initial account check finds a missing login, opening Orbit shows **Connect your providers**. **Providers…** in Settings reopens it at any time. Install the provider CLI through the linked official instructions, then use **Copy command & open Terminal** and paste the command:
+If the initial account check finds a missing login, opening Orbit shows **Connect your providers**. **Connect** under Providers in Settings reopens it at any time. Install the provider CLI through the linked official instructions, then use **Copy command and open Terminal** and paste the command:
 
 - Claude: `claude auth login`, using your Claude subscription.
 - Codex: `codex login`, choosing **Sign in with ChatGPT**. API keys have no subscription quota windows.

@@ -72,8 +72,8 @@ enum UpdateTools {
         expiry.cancel()
         guard process.terminationStatus == 0 else {
             throw UpdateFailure.message(path == curl
-                ? "GitHub request failed. Check your connection, then retry."
-                : "Update preparation failed. Your current app is unchanged; retry the update.")
+                ? String(localized: "GitHub request failed, check your connection and retry")
+                : String(localized: "Update preparation failed, your current app is unchanged; retry the update"))
         }
         return data
     }
@@ -86,7 +86,7 @@ enum UpdateTools {
 
     static func verifyDigest(_ data: Data, expected: String?) throws {
         let actual = "sha256:" + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        guard expected == actual else { throw UpdateFailure.message("Update checksum missing or invalid. Current app unchanged.") }
+        guard expected == actual else { throw UpdateFailure.message(String(localized: "Update checksum missing or invalid, current app unchanged")) }
     }
 
     static func prepare(_ release: OrbitRelease, currentApp: URL) throws -> URL {
@@ -95,11 +95,11 @@ enum UpdateTools {
               files.isWritableFile(atPath: currentApp.path),
               files.isWritableFile(atPath: currentApp.deletingLastPathComponent().path),
               !currentApp.path.contains("/AppTranslocation/") else {
-            throw UpdateFailure.message("Move Orbit to a writable Applications folder before updating.")
+            throw UpdateFailure.message(String(localized: "Move Orbit to a writable Applications folder before updating"))
         }
         guard let asset = release.diskImage, let url = asset.browser_download_url,
               url.hasPrefix("https://github.com/\(repository)/releases/download/") else {
-            throw UpdateFailure.message("Release has no Orbit disk image.")
+            throw UpdateFailure.message(String(localized: "Release has no Orbit disk image"))
         }
         let staging = currentApp.deletingLastPathComponent().appendingPathComponent(".Orbit-update-\(UUID().uuidString)")
         try files.createDirectory(at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
@@ -116,7 +116,7 @@ enum UpdateTools {
         guard let bundle = Bundle(url: source), bundle.bundleIdentifier == "dev.kielblock.orbit",
               bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String == release.version,
               files.isExecutableFile(atPath: source.appendingPathComponent("Contents/MacOS/Orbit").path) else {
-            throw UpdateFailure.message("Downloaded app does not match the release. Current app unchanged.")
+            throw UpdateFailure.message(String(localized: "Downloaded app does not match the release, current app unchanged"))
         }
         _ = try run("/usr/bin/codesign", ["--verify", "--deep", "--strict", source.path])
         let stagedApp = staging.appendingPathComponent("Orbit.app")
@@ -124,7 +124,7 @@ enum UpdateTools {
         _ = try run("/usr/bin/codesign", ["--verify", "--deep", "--strict", stagedApp.path])
         try files.removeItem(at: image)
         guard let helper = Bundle.main.url(forResource: "install-update", withExtension: "sh") else {
-            throw UpdateFailure.message("Update helper missing. Reinstall Orbit from Releases.")
+            throw UpdateFailure.message(String(localized: "Update helper missing, reinstall Orbit from Releases"))
         }
         try files.copyItem(at: helper, to: staging.appendingPathComponent("install-update.sh"))
         prepared = true
@@ -147,7 +147,7 @@ enum UpdateTools {
 final class AppUpdater: ObservableObject {
     @Published private(set) var release: OrbitRelease?
     @Published private(set) var busy = false
-    @Published private(set) var message = "Updates checked daily"
+    @Published private(set) var message = String(localized: "Updates checked daily")
     private let currentVersion: String
     private var lastCheck: Date?
 
@@ -163,15 +163,15 @@ final class AppUpdater: ObservableObject {
     func checkIfDue(force: Bool = false) {
         guard !busy, force || Self.isDue(lastCheck: lastCheck) else { return }
         busy = true
-        message = "Checking for updates…"
+        message = String(localized: "Checking for updates…")
         lastCheck = Date()
         Task {
             do {
                 let latest = try await Task.detached { try UpdateTools.latest() }.value
                 release = latest.update(from: currentVersion)
-                message = release.map { "Version \($0.version) available" } ?? "Orbit is up to date"
+                message = release.map { String(localized: "Version \($0.version) available") } ?? String(localized: "Orbit is up to date")
             } catch {
-                message = (error as? UpdateFailure)?.localizedDescription ?? "Could not read release information. Retry the check."
+                message = (error as? UpdateFailure)?.localizedDescription ?? String(localized: "Could not read release information, retry the check")
             }
             busy = false
         }
@@ -180,7 +180,7 @@ final class AppUpdater: ObservableObject {
     func install() {
         guard !busy, let release else { return }
         busy = true
-        message = "Downloading update…"
+        message = String(localized: "Downloading update…")
         let appURL = Bundle.main.bundleURL
         UpdateTools.audit("install", outcome: "started")
         Task {
@@ -198,7 +198,7 @@ final class AppUpdater: ObservableObject {
             } catch {
                 if let staging { try? FileManager.default.removeItem(at: staging) }
                 UpdateTools.audit("install", outcome: "failure")
-                message = (error as? UpdateFailure)?.localizedDescription ?? "Update failed. Current app unchanged; retry."
+                message = (error as? UpdateFailure)?.localizedDescription ?? String(localized: "Update failed, current app unchanged; retry")
                 busy = false
             }
         }

@@ -18,7 +18,7 @@ enum CodexAccount {
     static func read(executable: String? = ProviderTools.executable("codex"), timeout: TimeInterval = 25) throws -> [String: Any] {
         var success = false
         defer { UsageAudit.record(provider: .codex, success: success) }
-        guard let executable else { throw UsageError.missing("Install Codex CLI, then sign in with ChatGPT") }
+        guard let executable else { throw UsageError.missing(String(localized: "Install Codex CLI, then sign in with ChatGPT")) }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = ["app-server", "-c", "analytics.enabled=false"]
@@ -84,7 +84,7 @@ enum CodexAccount {
         // PII: account/read can contain an email; inspect only its type, never retain or log it.
         let account = try response(1)["account"] as? [String: Any]
         guard account?["type"] as? String == "chatgpt" else {
-            throw UsageError.missing("Sign in to Codex with ChatGPT; API keys have no subscription quotas")
+            throw UsageError.missing(String(localized: "Sign in to Codex with ChatGPT; API keys have no subscription quotas"))
         }
         try send(["id": 2, "method": "account/rateLimits/read"])
         let result = try response(2)

@@ -16,6 +16,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var blurSink: AnyCancellable?
     private var pendingConnections = false
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Thin overlay scrollers that show only while scrolling, even with a mouse plugged in (this app only).
+        UserDefaults.standard.set("WhenScrolling", forKey: "AppleShowScrollBars")
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         popover.behavior = .transient
@@ -29,7 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         fitPopover()
         blurSink = model.$blur.sink { [weak self] in self?.fadeGlass($0) }
         statusItem.button?.image = StatusIcon.image()
-        statusItem.button?.toolTip = "Orbit — open usage dashboard"
+        statusItem.button?.toolTip = String(localized: "Orbit, open the usage dashboard")
         statusItem.button?.target = self
         statusItem.button?.action = #selector(togglePopover)
         refresh()

@@ -1,16 +1,30 @@
 import AppKit
 import SwiftUI
 
+/// Sideline's S/M/L/XL scale. Raw values are the stored "panelSize" preference, so older choices still load.
 enum PanelScale: String, CaseIterable {
-    case normal, larger, largest
+    case small, normal, larger, largest
 
-    var title: String { rawValue.capitalized }
+    var title: String {
+        switch self {
+        case .small: return "S"
+        case .normal: return "M"
+        case .larger: return "L"
+        case .largest: return "XL"
+        }
+    }
     var factor: CGFloat {
         switch self {
+        case .small: return 0.85
         case .normal: return 1
         case .larger: return 1.15
         case .largest: return 1.3
         }
+    }
+    /// One step larger or smaller (Command-= / Command-minus), clamped at the ends.
+    func stepped(_ by: Int) -> PanelScale {
+        let all = Self.allCases
+        return all[min(max(all.firstIndex(of: self)! + by, 0), all.count - 1)]
     }
 }
 
@@ -33,6 +47,20 @@ final class GalaxyModel: ObservableObject {
     @Published var darkness = min(UserDefaults.standard.object(forKey: "darkness") as? Double ?? 0, 0.9) {
         didSet { UserDefaults.standard.set(darkness, forKey: "darkness") }
     }
+    /// "system", "en" or "pt-BR". macOS reads AppleLanguages at launch, so changing it restarts the app (as in Sideline).
+    @Published var language = UserDefaults.standard.string(forKey: "language") ?? "system" {
+        didSet {
+            guard language != oldValue else { return }
+            UserDefaults.standard.set(language, forKey: "language")
+            if language == "system" { UserDefaults.standard.removeObject(forKey: "AppleLanguages") }
+            else { UserDefaults.standard.set([language], forKey: "AppleLanguages") }
+            let config = NSWorkspace.OpenConfiguration()
+            config.createsNewApplicationInstance = true
+            NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config) { _, _ in
+                DispatchQueue.main.async { NSApp.terminate(nil) }
+            }
+        }
+    }
 }
 
 enum Galaxy {
@@ -41,7 +69,6 @@ enum Galaxy {
     /// Accent as text: #346bf1 is under 4.5:1 on the dark cards, this tint is ~7:1.
     static let accentText = Color(red: 0x7d / 255, green: 0xa1 / 255, blue: 0xfa / 255) // #7da1fa
     static let card = Color.white.opacity(0.04)
-    static let hairline = Color.white.opacity(0.06)
     /// Bars stay grey until a quota nears its limit, so warnings are the only color in the meters.
     static let bar = Color.white.opacity(0.7)
     static func accent(_ provider: Provider) -> Color {
@@ -54,7 +81,7 @@ enum Galaxy {
 }
 
 struct GalaxyPanel: View {
-    static let width: CGFloat = 340
+    static let width: CGFloat = 460
     @ObservedObject var model: GalaxyModel
     @ObservedObject var updater = AppUpdater()
     let refresh: () -> Void
@@ -69,14 +96,17 @@ struct GalaxyPanel: View {
             if measuring {
                 cards
             } else if model.showingSettings {
-                settingsView
+                settingsView.transition(screen)
             } else {
                 ViewThatFits(in: .vertical) {
                     cards.fixedSize(horizontal: false, vertical: true)
-                    ScrollView(showsIndicators: false) { cards }
+                    // The overlay scroll bar's lane, clear of the percentages.
+                    ScrollView { cards.padding(.trailing, 12) }
                 }
+                .transition(screen)
             }
         }
+        .animation(reduceMotion || measuring ? nil : .easeOut(duration: 0.2), value: model.showingSettings)
         .padding(16)
         .frame(width: Self.width, height: measuring ? nil : model.panelSize.height / scale, alignment: .top)
         .fixedSize(horizontal: false, vertical: measuring)
@@ -91,14 +121,22 @@ struct GalaxyPanel: View {
         }
     }
 
+    private var screen: AnyTransition { reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 4)) }
+
+    private var status: String {
+        if updater.busy { return updater.message }
+        if model.refreshing { return String(localized: "Refreshing…") }
+        return model.refreshedAt.map { String(localized: "Updated \(Format.clockTime($0))") } ?? String(localized: "Waiting for first update")
+    }
+
     private var cards: some View {
         VStack(spacing: 16) {
             ForEach(Array(Provider.allCases.enumerated()), id: \.offset) { index, provider in
                 ProviderCard(provider: provider, usage: model.usage[provider], active: !measuring && model.visible && !reduceMotion,
                              connect: { model.showingConnections = true })
                     .opacity(measuring || model.visible || !model.usage.isEmpty ? 1 : 0)
-                    .offset(y: measuring || model.visible || !model.usage.isEmpty ? 0 : 6)
-                    .animation(reduceMotion || measuring ? nil : .easeOut(duration: 0.25).delay(Double(index) * 0.05), value: model.visible)
+                    .offset(y: measuring || model.visible || !model.usage.isEmpty ? 0 : 4)
+                    .animation(reduceMotion || measuring ? nil : .easeOut(duration: 0.2).delay(Double(index) * 0.05), value: model.visible)
             }
         }
         .padding(1)
@@ -115,10 +153,8 @@ struct GalaxyPanel: View {
         HStack(spacing: 8) {
             Circle().fill(model.refreshing ? Color.orange : Color.green).frame(width: 6, height: 6)
                 .accessibilityHidden(true)
-            Text(updater.busy ? updater.message
-                 : model.refreshing ? "Refreshing…"
-                 : model.refreshedAt.map { "Updated \(Format.clockTime($0))" } ?? "Waiting for first update")
-                .font(.system(size: 11)).foregroundStyle(.secondary)
+            Text(status)
+                .font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
                 .lineLimit(1).truncationMode(.middle)
             Spacer()
             // Sideline's PillBar: icon buttons in one faint capsule.
@@ -142,8 +178,15 @@ struct GalaxyPanel: View {
                 }
             }
         }
-        // Menu items don't own shortcuts while closed, so Command-Q needs a live (invisible) button.
-        .background(Button("Quit") { NSApp.terminate(nil) }.keyboardShortcut("q").opacity(0).accessibilityHidden(true))
+        // Menu items don't own shortcuts while closed, so Command-Q and the size keys need live (invisible) buttons.
+        .background {
+            Group {
+                Button("Quit") { NSApp.terminate(nil) }.keyboardShortcut("q")
+                Button("Larger") { resize(model.panelScale.stepped(1)) }.keyboardShortcut("=")
+                Button("Smaller") { resize(model.panelScale.stepped(-1)) }.keyboardShortcut("-")
+            }
+            .opacity(0).accessibilityHidden(true)
+        }
     }
 
     // Sideline's gear is a tab, not a dropdown: a menu can't hold a slider.
@@ -162,41 +205,60 @@ struct GalaxyPanel: View {
         .accessibilityAddTraits(model.showingSettings ? .isSelected : [])
     }
 
+    // Sideline's settings: a native grouped form on the panel's glass.
     private var settingsView: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Picker("Size", selection: Binding(get: { model.panelScale }, set: { resize($0) })) {
-                ForEach(PanelScale.allCases, id: \.self) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            Slider(value: $model.blur, in: 0...1) { Text("Blur") }
-            Slider(value: $model.darkness, in: 0...0.9) { Text("Darkness") }
-            HStack {
-                Text(updater.message).foregroundStyle(.secondary).lineLimit(2)
-                Spacer()
-                Button(updater.release.map { "Update to \($0.version)" } ?? "Check for updates") {
-                    if updater.release == nil { updater.checkIfDue(force: true) }
-                    else { updater.install() }
+        Form {
+            Section("Display") {
+                Picker("Language", selection: $model.language) {
+                    Text("System").tag("system")
+                    Text(verbatim: "English").tag("en")
+                    Text(verbatim: "Português (Brasil)").tag("pt-BR")
                 }
-                .disabled(updater.busy)
+                .help("Orbit restarts to change the language")
+                Picker("Size", selection: Binding(get: { model.panelScale }, set: { resize($0) })) {
+                    ForEach(PanelScale.allCases, id: \.self) { Text(verbatim: $0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .help("Command-= and Command-minus also change the size")
+                Slider(value: $model.blur, in: 0...1) { Text("Blur") }
+                Slider(value: $model.darkness, in: 0...0.9) { Text("Darkness") }
             }
-            HStack {
-                Button("Providers…") { model.showingConnections = true }
-                Button("Privacy") {
-                    if let url = Bundle.main.url(forResource: "Privacy", withExtension: "txt") {
-                        NSWorkspace.shared.open(url)
+            Section("Providers") {
+                HStack {
+                    Text("Sign-in for Claude, Codex and Antigravity").foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Connect") { model.showingConnections = true }
+                }
+            }
+            Section("About") {
+                LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
+                HStack {
+                    Text(updater.message).foregroundStyle(.secondary).lineLimit(2)
+                    Spacer()
+                    if let release = updater.release {
+                        Button("Update to \(release.version)") { updater.install() }.disabled(updater.busy)
                     } else {
-                        NSWorkspace.shared.open(URL(string: "https://github.com/pkielblock/orbit/blob/main/Resources/Privacy.txt")!)
+                        Button("Check for updates") { updater.checkIfDue(force: true) }.disabled(updater.busy)
                     }
                 }
-                Spacer()
-                Button("Quit Orbit") { NSApp.terminate(nil) }
+                HStack {
+                    Text("What Orbit reads and sends").foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Privacy") {
+                        if let url = Bundle.main.url(forResource: "Privacy", withExtension: "txt") {
+                            NSWorkspace.shared.open(url)
+                        } else {
+                            NSWorkspace.shared.open(URL(string: "https://github.com/pkielblock/orbit/blob/main/Resources/Privacy.txt")!)
+                        }
+                    }
+                }
             }
+            Button("Quit Orbit") { NSApp.terminate(nil) }
         }
-        .font(.system(size: 12))
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Galaxy.card, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Galaxy.hairline))
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .font(.system(size: 13))
+        .padding(.horizontal, -16) // the form brings its own insets
     }
 }
 
@@ -216,7 +278,7 @@ private struct ProviderCard: View {
                     .accessibilityHidden(true)
                 Link(destination: provider.dashboardURL) {
                     HStack(spacing: 4) {
-                        Text(provider.name).font(.system(size: 15, weight: .semibold))
+                        Text(provider.name).font(.system(size: 15, weight: .medium))
                         Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.secondary)
                     }
@@ -231,9 +293,9 @@ private struct ProviderCard: View {
                     Text("Check connection").font(.system(size: 11, weight: .medium)).foregroundStyle(Color.orange)
                 }
             }
-            VStack(alignment: .leading, spacing: 10) {
-                UsageMeter(title: "Session", window: usage?.session, active: active)
-                UsageMeter(title: "Weekly", window: usage?.weekly, active: active)
+            VStack(alignment: .leading, spacing: 12) {
+                UsageMeter(title: String(localized: "Session"), window: usage?.session, active: active)
+                UsageMeter(title: String(localized: "Weekly"), window: usage?.weekly, active: active)
                 if let error = usage?.error {
                     Text(error).font(.system(size: 10)).foregroundStyle(Color.orange)
                         .lineLimit(1).truncationMode(.middle).help(error)
@@ -251,7 +313,6 @@ private struct ProviderCard: View {
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Galaxy.card, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Galaxy.hairline))
         }
     }
 }
@@ -268,8 +329,8 @@ private struct UsageMeter: View {
         VStack(spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(title).font(.system(size: 11, weight: .medium))
-                Text(percent == nil ? "not reported" : Format.reset(window?.resetsAt))
-                    .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+                Text(percent == nil ? String(localized: "not reported") : Format.reset(window?.resetsAt))
+                    .font(.system(size: 10).monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
                 Spacer()
                 if (percent ?? 0) >= 90 {
                     Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(tint)
@@ -277,12 +338,15 @@ private struct UsageMeter: View {
                 }
                 Text(Format.percent(percent)).font(.system(size: 13, weight: .medium).monospacedDigit())
                     .foregroundStyle((percent ?? 0) >= 70 ? tint : .white)
+                    .contentTransition(.numericText())
+                    .animation(active ? .spring(response: 0.4, dampingFraction: 0.85) : nil, value: percent)
             }
             OrbitBar(fraction: fraction, tint: tint, active: active)
-                .frame(height: 10)
+                .frame(height: 12)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(title), \(Format.percent(percent)) used, \(Format.reset(window?.resetsAt))\((percent ?? 0) >= 90 ? ", near limit" : "")")
+        .accessibilityLabel(String(localized: "\(title), \(Format.percent(percent)) used, \(Format.reset(window?.resetsAt))")
+                            + ((percent ?? 0) >= 90 ? String(localized: ", near limit") : ""))
     }
 }
 
@@ -322,17 +386,17 @@ private struct OrbitBar: View {
                 let progress = min(max(timeline.date.timeIntervalSince(began) / duration, 0), 1)
                 let current = active ? start + (end - start) * progress * progress * (3 - 2 * progress) : fraction
                 let width = size.width * current
-                let track = CGRect(x: 0, y: 3, width: size.width, height: 4)
+                let track = CGRect(x: 0, y: 4, width: size.width, height: 4)
                 context.fill(Path(roundedRect: track, cornerRadius: 2), with: .color(.white.opacity(0.08)))
                 if width > 0 {
-                    let fill = Path(roundedRect: CGRect(x: 0, y: 3, width: width, height: 4), cornerRadius: 2)
+                    let fill = Path(roundedRect: CGRect(x: 0, y: 4, width: width, height: 4), cornerRadius: 2)
                     context.fill(fill, with: .color(tint))
                 }
                 let elapsed = timeline.date.timeIntervalSince(began)
                 if active && end > start && elapsed >= 0 && elapsed < duration {
                     var rocket = context
                     rocket.opacity = min(1, (duration - elapsed) / 0.2)
-                    rocket.translateBy(x: min(max(width, 10), size.width - 10), y: 5)
+                    rocket.translateBy(x: min(max(width, 10), size.width - 10), y: 6)
                     let flicker = 2 + sin(elapsed * 50) * 1.5
                     var flame = Path()
                     flame.move(to: CGPoint(x: -5, y: -2))
