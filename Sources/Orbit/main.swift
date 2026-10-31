@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var timer: Timer?
     private var lastRefresh: Date = .distantPast
     private var checkedConnections = false
-    private var transparencySink: AnyCancellable?
+    private var blurSink: AnyCancellable?
     private var pendingConnections = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -27,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             refresh: { [weak self] in self?.refresh() },
             resize: { [weak self] in self?.resizePanel(to: $0) }))
         fitPopover()
-        transparencySink = model.$transparency.sink { [weak self] in self?.fadeGlass($0) }
+        blurSink = model.$blur.sink { [weak self] in self?.fadeGlass($0) }
         statusItem.button?.image = StatusIcon.image()
         statusItem.button?.toolTip = "Orbit — open usage dashboard"
         statusItem.button?.target = self
@@ -50,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
-            fadeGlass(model.transparency)
+            fadeGlass(model.blur)
             if pendingConnections {
                 pendingConnections = false
                 model.showingConnections = true
@@ -58,17 +58,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    /// The popover's glass is a sibling of the content, so fading it leaves the cards opaque (Sideline fades its blur the same way).
-    private func fadeGlass(_ transparency: Double) {
-        let frame = popover.contentViewController?.view.superview
-        for view in frame?.subviews ?? [] where view is NSVisualEffectView || isGlass(view) {
-            view.alphaValue = 1 - transparency
+    /// Sideline's GlassFade: the blur is a private backdrop layer in the popover frame; no public API or view alpha reaches it,
+    /// so fading it leaves the cards and the material tint alone.
+    private func fadeGlass(_ blur: Double) {
+        func walk(_ layer: CALayer) {
+            if layer.className == "CABackdropLayer" { layer.opacity = Float(blur) }
+            layer.sublayers?.forEach(walk)
         }
-    }
-
-    private func isGlass(_ view: NSView) -> Bool {
-        if #available(macOS 26, *) { return view is NSGlassEffectView }
-        return false
+        // The backdrop exists only after the popover's first layout pass.
+        DispatchQueue.main.async { [weak self] in
+            (self?.popover.contentViewController?.view.window?.contentView?.superview?.layer).map(walk)
+        }
     }
 
     func popoverDidClose(_ notification: Notification) {

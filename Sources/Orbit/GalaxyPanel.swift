@@ -24,19 +24,26 @@ final class GalaxyModel: ObservableObject {
     @Published var panelSize = NSSize(width: 340, height: 600)
     @Published var showingConnections = false
     @Published var showingSettings = false
-    /// Sideline's Blur and Darkness pair: how far the popover glass fades out, and the black over it.
-    @Published var transparency = UserDefaults.standard.object(forKey: "panelTransparency") as? Double ?? 0 {
-        didSet { UserDefaults.standard.set(transparency, forKey: "panelTransparency") }
+    /// Sideline's Blur and Darkness pair: how opaque the popover blur is, and how dark the tint over it.
+    /// Blur falls back to the old Transparency setting, inverted.
+    @Published var blur = UserDefaults.standard.object(forKey: "blur") as? Double
+        ?? (UserDefaults.standard.object(forKey: "panelTransparency") as? Double).map { 1 - $0 } ?? 1 {
+        didSet { UserDefaults.standard.set(blur, forKey: "blur") }
     }
-    @Published var darkness = UserDefaults.standard.object(forKey: "darkness") as? Double ?? 0 {
+    @Published var darkness = min(UserDefaults.standard.object(forKey: "darkness") as? Double ?? 0, 0.9) {
         didSet { UserDefaults.standard.set(darkness, forKey: "darkness") }
     }
 }
 
-private enum Galaxy {
+enum Galaxy {
     // Sideline's look: native popover material, faint cards, T3 accent for app state.
     static let accent = Color(red: 0x34 / 255, green: 0x6b / 255, blue: 0xf1 / 255) // #346bf1
+    /// Accent as text: #346bf1 is under 4.5:1 on the dark cards, this tint is ~7:1.
+    static let accentText = Color(red: 0x7d / 255, green: 0xa1 / 255, blue: 0xfa / 255) // #7da1fa
     static let card = Color.white.opacity(0.04)
+    static let hairline = Color.white.opacity(0.06)
+    /// Bars stay grey until a quota nears its limit, so warnings are the only color in the meters.
+    static let bar = Color.white.opacity(0.7)
     static func accent(_ provider: Provider) -> Color {
         switch provider {
         case .claude: return Color(red: 1, green: 0.64, blue: 0.46)
@@ -70,7 +77,7 @@ struct GalaxyPanel: View {
                 }
             }
         }
-        .padding(14)
+        .padding(16)
         .frame(width: Self.width, height: measuring ? nil : model.panelSize.height / scale, alignment: .top)
         .fixedSize(horizontal: false, vertical: measuring)
         .scaleEffect(scale)
@@ -105,7 +112,7 @@ struct GalaxyPanel: View {
     }
 
     private var header: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             Circle().fill(model.refreshing ? Color.orange : Color.green).frame(width: 6, height: 6)
                 .accessibilityHidden(true)
             Text(updater.busy ? updater.message
@@ -117,7 +124,7 @@ struct GalaxyPanel: View {
             // Sideline's PillBar: icon buttons in one faint capsule.
             HStack(spacing: 2) {
                 Button(action: refresh) {
-                    Image(systemName: "arrow.clockwise").font(.system(size: 13, weight: .semibold))
+                    Image(systemName: "arrow.clockwise").font(.system(size: 13, weight: .medium))
                         .frame(width: 30, height: 26).contentShape(Capsule())
                 }
                 .buttonStyle(.plain).disabled(model.refreshing).opacity(model.refreshing ? 0.4 : 1)
@@ -127,7 +134,7 @@ struct GalaxyPanel: View {
                 settings
             }
             .foregroundStyle(.secondary)
-            .padding(3)
+            .padding(4)
             .background(.white.opacity(0.06), in: Capsule())
             .overlay(alignment: .topTrailing) {
                 if updater.release != nil && !updater.busy {
@@ -142,7 +149,7 @@ struct GalaxyPanel: View {
     // Sideline's gear is a tab, not a dropdown: a menu can't hold a slider.
     private var settings: some View {
         Button { model.showingSettings.toggle() } label: {
-            Image(systemName: "gearshape.fill").font(.system(size: 13, weight: .semibold))
+            Image(systemName: "gearshape").font(.system(size: 13, weight: .medium))
                 .frame(width: 30, height: 26)
                 .foregroundStyle(model.showingSettings ? Color.white : .secondary)
                 .background { if model.showingSettings { Capsule().fill(Galaxy.accent) } }
@@ -156,13 +163,13 @@ struct GalaxyPanel: View {
     }
 
     private var settingsView: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             Picker("Size", selection: Binding(get: { model.panelScale }, set: { resize($0) })) {
                 ForEach(PanelScale.allCases, id: \.self) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
-            Slider(value: $model.transparency, in: 0...1) { Text("Transparency") }
-            Slider(value: $model.darkness, in: 0...1) { Text("Darkness") }
+            Slider(value: $model.blur, in: 0...1) { Text("Blur") }
+            Slider(value: $model.darkness, in: 0...0.9) { Text("Darkness") }
             HStack {
                 Text(updater.message).foregroundStyle(.secondary).lineLimit(2)
                 Spacer()
@@ -189,6 +196,7 @@ struct GalaxyPanel: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Galaxy.card, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Galaxy.hairline))
     }
 }
 
@@ -208,8 +216,8 @@ private struct ProviderCard: View {
                     .accessibilityHidden(true)
                 Link(destination: provider.dashboardURL) {
                     HStack(spacing: 4) {
-                        Text(provider.name).font(.system(size: 15, weight: .bold))
-                        Image(systemName: "arrow.up.right").font(.system(size: 9, weight: .semibold))
+                        Text(provider.name).font(.system(size: 15, weight: .semibold))
+                        Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -224,8 +232,8 @@ private struct ProviderCard: View {
                 }
             }
             VStack(alignment: .leading, spacing: 10) {
-                UsageMeter(title: "Session", window: usage?.session, accent: accent, active: active)
-                UsageMeter(title: "Weekly", window: usage?.weekly, accent: accent, active: active)
+                UsageMeter(title: "Session", window: usage?.session, active: active)
+                UsageMeter(title: "Weekly", window: usage?.weekly, active: active)
                 if let error = usage?.error {
                     Text(error).font(.system(size: 10)).foregroundStyle(Color.orange)
                         .lineLimit(1).truncationMode(.middle).help(error)
@@ -236,13 +244,14 @@ private struct ProviderCard: View {
                         .font(.system(size: 11, weight: .medium)).buttonStyle(.plain)
                         .foregroundStyle(accent)
                 } else if usage?.error != nil, let date = usage?.updatedAt {
-                    Text("Last quota: \(Format.clockTime(date))")
+                    Text("Quota from \(Format.clockTime(date))")
                         .font(.system(size: 10)).foregroundStyle(.secondary)
                 }
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Galaxy.card, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Galaxy.hairline))
         }
     }
 }
@@ -250,24 +259,23 @@ private struct ProviderCard: View {
 private struct UsageMeter: View {
     let title: String
     let window: UsageWindow?
-    let accent: Color
     let active: Bool
     private var percent: Double? { window?.usedPercent.flatMap { $0.isFinite ? $0 : nil } }
     private var fraction: Double { min(max((percent ?? 0) / 100, 0), 1) }
-    private var tint: Color { (percent ?? 0) >= 90 ? .red : (percent ?? 0) >= 70 ? .orange : accent }
+    private var tint: Color { (percent ?? 0) >= 90 ? .red : (percent ?? 0) >= 70 ? .orange : Galaxy.bar }
 
     var body: some View {
-        VStack(spacing: 3) {
-            HStack(alignment: .firstTextBaseline, spacing: 5) {
+        VStack(spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(title).font(.system(size: 11, weight: .medium))
                 Text(percent == nil ? "not reported" : Format.reset(window?.resetsAt))
                     .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
                 Spacer()
                 if (percent ?? 0) >= 90 {
-                    Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 8)).foregroundStyle(tint)
+                    Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(tint)
                         .help("Near limit")
                 }
-                Text(Format.percent(percent)).font(.system(size: 12, weight: .semibold).monospacedDigit())
+                Text(Format.percent(percent)).font(.system(size: 13, weight: .medium).monospacedDigit())
                     .foregroundStyle((percent ?? 0) >= 70 ? tint : .white)
             }
             OrbitBar(fraction: fraction, tint: tint, active: active)
@@ -318,7 +326,7 @@ private struct OrbitBar: View {
                 context.fill(Path(roundedRect: track, cornerRadius: 2), with: .color(.white.opacity(0.08)))
                 if width > 0 {
                     let fill = Path(roundedRect: CGRect(x: 0, y: 3, width: width, height: 4), cornerRadius: 2)
-                    context.fill(fill, with: .linearGradient(Gradient(colors: [tint.opacity(0.55), tint]), startPoint: .zero, endPoint: CGPoint(x: width, y: 0)))
+                    context.fill(fill, with: .color(tint))
                 }
                 let elapsed = timeline.date.timeIntervalSince(began)
                 if active && end > start && elapsed >= 0 && elapsed < duration {

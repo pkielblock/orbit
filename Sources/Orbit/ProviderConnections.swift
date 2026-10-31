@@ -10,11 +10,11 @@ struct ProviderConnections: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Connect your providers").font(.title2.bold())
+            Text("Connect your providers").font(.title2.weight(.semibold))
             Text("Orbit uses accounts signed in through your provider tools. Complete sign-in, then check connections.")
                 .font(.callout).foregroundStyle(.secondary)
             ForEach(Array(Provider.allCases.enumerated()), id: \.offset) { _, provider in
-                VStack(alignment: .leading, spacing: 7) {
+                VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text(provider.name).font(.headline)
                         Spacer()
@@ -31,19 +31,26 @@ struct ProviderConnections: View {
                                 NSWorkspace.shared.openApplication(at: url, configuration: .init())
                             }
                         }
+                        .font(.caption.weight(.medium)).foregroundStyle(Galaxy.accentText)
                     }
-                    Link("Installation & sign-in help", destination: helpURL(provider)).font(.caption)
+                    Link("Installation & sign-in help", destination: helpURL(provider)).font(.caption).foregroundStyle(.secondary)
                 }
-                .padding(12).background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+                .padding(12).background(Galaxy.card, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Galaxy.hairline))
             }
             HStack {
                 Button(model.refreshing ? "Checking…" : "Check connections", action: refresh).disabled(model.refreshing)
+                    .foregroundStyle(.secondary)
                 Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                Button { dismiss() } label: {
+                    Text("Done").fontWeight(.medium).padding(.horizontal, 16).frame(height: 28)
+                        .background(Galaxy.accent, in: RoundedRectangle(cornerRadius: 8))
+                }
+                .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(22).frame(width: 390)
-        .background(Color(red: 0.025, green: 0.03, blue: 0.055))
+        .padding(24).frame(width: 392)
+        .background(Color(white: 0.04)) // T3 Black surface #0a0a0a
         .foregroundStyle(.white).buttonStyle(.plain).preferredColorScheme(.dark)
     }
 
