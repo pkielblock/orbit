@@ -46,11 +46,11 @@ Add `--size small`, `--size normal`, `--size larger`, or `--size largest` to pre
 
 ## Language
 
-Orbit speaks English and Português (Brasil). Settings > Language picks System (the macOS language), English or Português (Brasil) and restarts the app. Translations live in `Localization/pt-BR.lproj/Localizable.strings`, keyed by the English text; `scripts/build-app.sh` copies them into the bundle. Dates and times follow the chosen language.
+Orbit speaks English and Português (Brasil). Settings > Language picks System (the macOS language), English or Português (Brasil) and restarts the app. Translations live in `Localization/pt-BR.lproj/Localizable.strings`, keyed by the English text; `scripts/build-app.sh` copies them into the bundle. Dates and times follow the chosen language. In Portuguese, provider messages that still arrive in English (errors from the Claude API or the Codex CLI) are translated on your Mac by Apple's Translation on macOS 15 and later; macOS may ask once to download the language. On macOS 13 and 14 they stay in English.
 
 ## App icon
 
-The app bundle uses a colored spiral galaxy; the menu bar uses the same drawing as a white template that macOS adapts to the menu bar appearance. `Sources/Orbit/GalaxyIcon.swift` is the shared vector artwork. The build script generates all ten macOS icon representations (16–1024 pixels) and bundles `AppIcon.icns`; no external assets or dependencies are needed.
+The app icon is a planet with its orbit on a near-black tile, the used part of the orbit lit in blue with the satellite at its tip. `scripts/icon.swift` draws it; the build script compiles and runs it to bundle `AppIcon.icns`. Regenerate the README logo with `swiftc -o build/icon scripts/icon.swift && build/icon build/AppIcon.icns docs/logo.png`. The menu bar uses a white spiral galaxy (`Sources/Orbit/GalaxyIcon.swift`) as a template image that macOS adapts to the menu bar appearance.
 
 ## Logos
 

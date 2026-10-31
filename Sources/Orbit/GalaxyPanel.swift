@@ -116,6 +116,7 @@ struct GalaxyPanel: View {
         .background(Color.black.opacity(model.darkness))
         .foregroundStyle(.white)
         .preferredColorScheme(.dark)
+        .translatesProviderText()
         .sheet(isPresented: $model.showingConnections) {
             ProviderConnections(model: model, refresh: refresh)
         }
@@ -296,7 +297,7 @@ private struct ProviderCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 UsageMeter(title: String(localized: "Session"), window: usage?.session, active: active)
                 UsageMeter(title: String(localized: "Weekly"), window: usage?.weekly, active: active)
-                if let error = usage?.error {
+                if let error = usage?.error.map(translated) {
                     Text(error).font(.system(size: 10)).foregroundStyle(Color.orange)
                         .lineLimit(1).truncationMode(.middle).help(error)
                         .accessibilityLabel("Provider error: \(error). Displayed quotas may be stale.")
