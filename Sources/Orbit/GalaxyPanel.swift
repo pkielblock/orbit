@@ -23,14 +23,17 @@ final class GalaxyModel: ObservableObject {
     @Published var panelScale = PanelScale(rawValue: UserDefaults.standard.string(forKey: "panelSize") ?? "") ?? .normal
     @Published var panelSize = NSSize(width: 340, height: 600)
     @Published var showingConnections = false
+    @Published var showingSettings = false
+    /// 1 shows the native material as is; lower values cover it with black, 0 is solid T3 Black.
+    @Published var transparency = UserDefaults.standard.object(forKey: "transparency") as? Double ?? 1 {
+        didSet { UserDefaults.standard.set(transparency, forKey: "transparency") }
+    }
 }
 
 private enum Galaxy {
-    // T3 Black neutrals; provider accents stay as data color on logos and bars.
-    static let ink = Color.black
-    static let surface = Color(red: 0.04, green: 0.04, blue: 0.04)
-    static let line = Color.white.opacity(0.07)
-    static let muted = Color.white.opacity(0.5)
+    // Sideline's look: native popover material, faint cards, T3 accent for app state.
+    static let accent = Color(red: 0x34 / 255, green: 0x6b / 255, blue: 0xf1 / 255) // #346bf1
+    static let card = Color.white.opacity(0.04)
     static func accent(_ provider: Provider) -> Color {
         switch provider {
         case .claude: return Color(red: 1, green: 0.64, blue: 0.46)
@@ -51,25 +54,26 @@ struct GalaxyPanel: View {
     private var scale: CGFloat { measuring ? 1 : model.panelSize.width / Self.width }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             header
             if measuring {
                 cards
+            } else if model.showingSettings {
+                settingsView
             } else {
                 ViewThatFits(in: .vertical) {
                     cards.fixedSize(horizontal: false, vertical: true)
                     ScrollView(showsIndicators: false) { cards }
                 }
             }
-            footer
         }
         .padding(14)
         .frame(width: Self.width, height: measuring ? nil : model.panelSize.height / scale, alignment: .top)
         .fixedSize(horizontal: false, vertical: measuring)
-        .background(Galaxy.ink)
         .scaleEffect(scale)
         .frame(width: measuring ? Self.width : model.panelSize.width,
                height: measuring ? nil : model.panelSize.height)
+        .background(Color.black.opacity(1 - model.transparency))
         .foregroundStyle(.white)
         .preferredColorScheme(.dark)
         .sheet(isPresented: $model.showingConnections) {
@@ -78,7 +82,7 @@ struct GalaxyPanel: View {
     }
 
     private var cards: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 16) {
             ForEach(Array(Provider.allCases.enumerated()), id: \.offset) { index, provider in
                 ProviderCard(provider: provider, usage: model.usage[provider], active: !measuring && model.visible && !reduceMotion,
                              connect: { model.showingConnections = true })
@@ -98,51 +102,74 @@ struct GalaxyPanel: View {
     }
 
     private var header: some View {
-        HStack(spacing: 7) {
-            Image(nsImage: StatusIcon.image()).resizable().frame(width: 14, height: 14)
-                .foregroundStyle(Galaxy.muted).accessibilityHidden(true)
-            Text("Orbit").font(.system(size: 13, weight: .semibold))
-            Spacer()
-            Button(action: refresh) {
-                Image(systemName: "arrow.clockwise").font(.system(size: 11, weight: .semibold))
-                    .frame(width: 26, height: 26)
-                    .background(Galaxy.surface, in: Circle())
-                    .overlay(Circle().stroke(Galaxy.line))
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain).disabled(model.refreshing).opacity(model.refreshing ? 0.4 : 1)
-            .keyboardShortcut("r")
-            .help("Fetch the latest usage from all providers")
-            .accessibilityLabel("Refresh")
-        }
-    }
-
-    private var footer: some View {
         HStack(spacing: 6) {
-            Circle().fill(model.refreshing ? Color.orange : Color.green).frame(width: 5, height: 5)
+            Circle().fill(model.refreshing ? Color.orange : Color.green).frame(width: 6, height: 6)
                 .accessibilityHidden(true)
             Text(updater.busy ? updater.message
                  : model.refreshing ? "Refreshing…"
                  : model.refreshedAt.map { "Updated \(Format.clockTime($0))" } ?? "Waiting for first update")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
                 .lineLimit(1).truncationMode(.middle)
-            if let release = updater.release, !updater.busy {
-                Button("Update to \(release.version)") { updater.install() }
-                    .buttonStyle(.plain).foregroundStyle(.white)
-                    .help("Downloads, installs and restarts Orbit")
-            }
             Spacer()
-            Menu {
-                Text(updater.message)
-                Button(updater.release == nil ? "Check for updates" : "Update & restart") {
+            // Sideline's PillBar: icon buttons in one faint capsule.
+            HStack(spacing: 2) {
+                Button(action: refresh) {
+                    Image(systemName: "arrow.clockwise").font(.system(size: 13, weight: .semibold))
+                        .frame(width: 30, height: 26).contentShape(Capsule())
+                }
+                .buttonStyle(.plain).disabled(model.refreshing).opacity(model.refreshing ? 0.4 : 1)
+                .keyboardShortcut("r")
+                .help("Fetch the latest usage from all providers")
+                .accessibilityLabel("Refresh")
+                settings
+            }
+            .foregroundStyle(.secondary)
+            .padding(3)
+            .background(.white.opacity(0.06), in: Capsule())
+            .overlay(alignment: .topTrailing) {
+                if updater.release != nil && !updater.busy {
+                    Circle().fill(Galaxy.accent).frame(width: 8, height: 8).accessibilityLabel("Update available")
+                }
+            }
+        }
+        // Menu items don't own shortcuts while closed, so Command-Q needs a live (invisible) button.
+        .background(Button("Quit") { NSApp.terminate(nil) }.keyboardShortcut("q").opacity(0).accessibilityHidden(true))
+    }
+
+    // Sideline's gear is a tab, not a dropdown: a menu can't hold a slider.
+    private var settings: some View {
+        Button { model.showingSettings.toggle() } label: {
+            Image(systemName: "gearshape.fill").font(.system(size: 13, weight: .semibold))
+                .frame(width: 30, height: 26)
+                .foregroundStyle(model.showingSettings ? Color.white : .secondary)
+                .background { if model.showingSettings { Capsule().fill(Galaxy.accent) } }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(",")
+        .help("Settings")
+        .accessibilityLabel("Settings")
+        .accessibilityAddTraits(model.showingSettings ? .isSelected : [])
+    }
+
+    private var settingsView: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Picker("Size", selection: Binding(get: { model.panelScale }, set: { resize($0) })) {
+                ForEach(PanelScale.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            Slider(value: $model.transparency, in: 0...1) { Text("Transparency") }
+            HStack {
+                Text(updater.message).foregroundStyle(.secondary).lineLimit(2)
+                Spacer()
+                Button(updater.release.map { "Update to \($0.version)" } ?? "Check for updates") {
                     if updater.release == nil { updater.checkIfDue(force: true) }
                     else { updater.install() }
                 }
                 .disabled(updater.busy)
-                Divider()
-                Picker("Size", selection: Binding(get: { model.panelScale }, set: { resize($0) })) {
-                    ForEach(PanelScale.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
-                Button("Connect providers…") { model.showingConnections = true }
+            }
+            HStack {
+                Button("Providers…") { model.showingConnections = true }
                 Button("Privacy") {
                     if let url = Bundle.main.url(forResource: "Privacy", withExtension: "txt") {
                         NSWorkspace.shared.open(url)
@@ -150,19 +177,14 @@ struct GalaxyPanel: View {
                         NSWorkspace.shared.open(URL(string: "https://github.com/pkielblock/orbit/blob/main/Resources/Privacy.txt")!)
                     }
                 }
-                Divider()
+                Spacer()
                 Button("Quit Orbit") { NSApp.terminate(nil) }
-            } label: {
-                Image(systemName: "slider.horizontal.3").font(.system(size: 11, weight: .medium))
             }
-            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-            .help("Settings")
-            .accessibilityLabel("Settings")
         }
-        .font(.system(size: 10)).foregroundStyle(Galaxy.muted)
-        .padding(.horizontal, 2)
-        // Menu items don't own shortcuts while closed, so Command-Q needs a live (invisible) button.
-        .background(Button("Quit") { NSApp.terminate(nil) }.keyboardShortcut("q").opacity(0).accessibilityHidden(true))
+        .font(.system(size: 12))
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Galaxy.card, in: RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -174,16 +196,17 @@ private struct ProviderCard: View {
     private var accent: Color { Galaxy.accent(provider) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 7) {
-                Image(nsImage: Logos.image(for: provider, height: 14))
-                    .resizable().frame(width: 14, height: 14).foregroundStyle(accent)
+        // Sideline layout: a bold section title, then the content in a faint card.
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(nsImage: Logos.image(for: provider, height: 18))
+                    .resizable().frame(width: 18, height: 18).foregroundStyle(accent)
                     .accessibilityHidden(true)
                 Link(destination: provider.dashboardURL) {
-                    HStack(spacing: 3) {
-                        Text(provider.name).font(.system(size: 12, weight: .semibold))
-                        Image(systemName: "arrow.up.right").font(.system(size: 8, weight: .semibold))
-                            .foregroundStyle(Galaxy.muted)
+                    HStack(spacing: 4) {
+                        Text(provider.name).font(.system(size: 15, weight: .bold))
+                        Image(systemName: "arrow.up.right").font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .buttonStyle(.plain)
@@ -191,31 +214,32 @@ private struct ProviderCard: View {
                 .accessibilityLabel("Open \(provider.name) dashboard in your browser")
                 Spacer()
                 if usage == nil {
-                    Text("Connecting…").font(.system(size: 10)).foregroundStyle(Galaxy.muted)
+                    Text("Connecting…").font(.system(size: 11)).foregroundStyle(.secondary)
                 } else if usage?.error != nil {
-                    Text("Check connection").font(.system(size: 10, weight: .medium)).foregroundStyle(Color.orange)
+                    Text("Check connection").font(.system(size: 11, weight: .medium)).foregroundStyle(Color.orange)
                 }
             }
-            UsageMeter(title: "Session", window: usage?.session, accent: accent, active: active)
-            UsageMeter(title: "Weekly", window: usage?.weekly, accent: accent, active: active)
-            if let error = usage?.error {
-                Text(error).font(.system(size: 9)).foregroundStyle(Color.orange)
-                    .lineLimit(1).truncationMode(.middle).help(error)
-                    .accessibilityLabel("Provider error: \(error). Displayed quotas may be stale.")
+            VStack(alignment: .leading, spacing: 10) {
+                UsageMeter(title: "Session", window: usage?.session, accent: accent, active: active)
+                UsageMeter(title: "Weekly", window: usage?.weekly, accent: accent, active: active)
+                if let error = usage?.error {
+                    Text(error).font(.system(size: 10)).foregroundStyle(Color.orange)
+                        .lineLimit(1).truncationMode(.middle).help(error)
+                        .accessibilityLabel("Provider error: \(error). Displayed quotas may be stale.")
+                }
+                if usage?.needsConnection == true {
+                    Button("Connect \(provider.name)", action: connect)
+                        .font(.system(size: 11, weight: .medium)).buttonStyle(.plain)
+                        .foregroundStyle(accent)
+                } else if usage?.error != nil, let date = usage?.updatedAt {
+                    Text("Last quota: \(Format.clockTime(date))")
+                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                }
             }
-            if usage?.needsConnection == true {
-                Button("Connect \(provider.name)", action: connect)
-                    .font(.system(size: 10, weight: .medium)).buttonStyle(.plain)
-                    .foregroundStyle(accent)
-            } else if usage?.error != nil, let date = usage?.updatedAt {
-                Text("Last quota: \(Format.clockTime(date))")
-                    .font(.system(size: 9)).foregroundStyle(Galaxy.muted)
-            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Galaxy.card, in: RoundedRectangle(cornerRadius: 12))
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Galaxy.surface, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Galaxy.line))
     }
 }
 
@@ -231,15 +255,15 @@ private struct UsageMeter: View {
     var body: some View {
         VStack(spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 5) {
-                Text(title).font(.system(size: 10, weight: .medium))
+                Text(title).font(.system(size: 11, weight: .medium))
                 Text(percent == nil ? "not reported" : Format.reset(window?.resetsAt))
-                    .font(.system(size: 9)).foregroundStyle(Galaxy.muted).lineLimit(1)
+                    .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
                 Spacer()
                 if (percent ?? 0) >= 90 {
                     Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 8)).foregroundStyle(tint)
                         .help("Near limit")
                 }
-                Text(Format.percent(percent)).font(.system(size: 11, weight: .semibold).monospacedDigit())
+                Text(Format.percent(percent)).font(.system(size: 12, weight: .semibold).monospacedDigit())
                     .foregroundStyle((percent ?? 0) >= 70 ? tint : .white)
             }
             OrbitBar(fraction: fraction, tint: tint, active: active)

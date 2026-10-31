@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         popover.behavior = .transient
+        popover.appearance = NSAppearance(named: .darkAqua) // dark native material, as in Sideline
         popover.delegate = self
         popover.contentViewController = NSHostingController(rootView: GalaxyPanel(
             model: model,
@@ -45,11 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             fitPopover()
             popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            if let window = popover.contentViewController?.view.window {
-                window.isOpaque = true
-                window.backgroundColor = .black
-                window.makeKey()
-            }
+            popover.contentViewController?.view.window?.makeKey()
             if pendingConnections {
                 pendingConnections = false
                 model.showingConnections = true
@@ -57,7 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    func popoverDidClose(_ notification: Notification) { model.visible = false }
+    func popoverDidClose(_ notification: Notification) {
+        model.visible = false
+        model.showingSettings = false
+    }
 
     private func resizePanel(to scale: PanelScale) {
         model.panelScale = scale
@@ -151,8 +151,13 @@ func snapshotUsage(to path: String, demo: Bool) {
             model.panelScale = scale
         }
         model.panelSize = GalaxyPanel.fittedSize(model: model, available: NSSize(width: 2000, height: 2000))
+        model.showingSettings = CommandLine.arguments.contains("--settings")
         let controller = NSHostingController(rootView: GalaxyPanel(model: model, refresh: {}))
         let view = controller.view
+        // Offscreen capture has no popover material behind it; paint its dark tone.
+        view.appearance = NSAppearance(named: .darkAqua)
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor(white: 0.12, alpha: 1).cgColor
         view.frame = NSRect(origin: .zero, size: model.panelSize)
         let window = NSWindow(contentRect: view.frame, styleMask: .borderless, backing: .buffered, defer: false)
         window.contentView = view
