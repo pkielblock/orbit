@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 /// Menu bar only, with a transient popover that dismisses on Escape or an outside click.
@@ -12,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var timer: Timer?
     private var lastRefresh: Date = .distantPast
     private var checkedConnections = false
+    private var transparencySink: AnyCancellable?
     private var pendingConnections = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -25,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             refresh: { [weak self] in self?.refresh() },
             resize: { [weak self] in self?.resizePanel(to: $0) }))
         fitPopover()
+        transparencySink = model.$transparency.sink { [weak self] in self?.fadeGlass($0) }
         statusItem.button?.image = StatusIcon.image()
         statusItem.button?.toolTip = "Orbit — open usage dashboard"
         statusItem.button?.target = self
@@ -47,11 +50,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
+            fadeGlass(model.transparency)
             if pendingConnections {
                 pendingConnections = false
                 model.showingConnections = true
             }
         }
+    }
+
+    /// The popover's glass is a sibling of the content, so fading it leaves the cards opaque (Sideline fades its blur the same way).
+    private func fadeGlass(_ transparency: Double) {
+        let frame = popover.contentViewController?.view.superview
+        for view in frame?.subviews ?? [] where view is NSVisualEffectView || isGlass(view) {
+            view.alphaValue = 1 - transparency
+        }
+    }
+
+    private func isGlass(_ view: NSView) -> Bool {
+        if #available(macOS 26, *) { return view is NSGlassEffectView }
+        return false
     }
 
     func popoverDidClose(_ notification: Notification) {

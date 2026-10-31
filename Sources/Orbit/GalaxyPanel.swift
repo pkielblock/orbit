@@ -24,9 +24,12 @@ final class GalaxyModel: ObservableObject {
     @Published var panelSize = NSSize(width: 340, height: 600)
     @Published var showingConnections = false
     @Published var showingSettings = false
-    /// 1 shows the native material as is; lower values cover it with black, 0 is solid T3 Black.
-    @Published var transparency = UserDefaults.standard.object(forKey: "transparency") as? Double ?? 1 {
-        didSet { UserDefaults.standard.set(transparency, forKey: "transparency") }
+    /// Sideline's Blur and Darkness pair: how far the popover glass fades out, and the black over it.
+    @Published var transparency = UserDefaults.standard.object(forKey: "panelTransparency") as? Double ?? 0 {
+        didSet { UserDefaults.standard.set(transparency, forKey: "panelTransparency") }
+    }
+    @Published var darkness = UserDefaults.standard.object(forKey: "darkness") as? Double ?? 0 {
+        didSet { UserDefaults.standard.set(darkness, forKey: "darkness") }
     }
 }
 
@@ -73,7 +76,7 @@ struct GalaxyPanel: View {
         .scaleEffect(scale)
         .frame(width: measuring ? Self.width : model.panelSize.width,
                height: measuring ? nil : model.panelSize.height)
-        .background(Color.black.opacity(1 - model.transparency))
+        .background(Color.black.opacity(model.darkness))
         .foregroundStyle(.white)
         .preferredColorScheme(.dark)
         .sheet(isPresented: $model.showingConnections) {
@@ -159,6 +162,7 @@ struct GalaxyPanel: View {
             }
             .pickerStyle(.segmented)
             Slider(value: $model.transparency, in: 0...1) { Text("Transparency") }
+            Slider(value: $model.darkness, in: 0...1) { Text("Darkness") }
             HStack {
                 Text(updater.message).foregroundStyle(.secondary).lineLimit(2)
                 Spacer()
