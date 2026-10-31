@@ -50,7 +50,7 @@ Orbit speaks English and Português (Brasil). Settings > Language picks System (
 
 ## App icon
 
-The app icon is a planet with its orbit on a near-black tile, the used part of the orbit lit in blue with the satellite at its tip. `scripts/icon.swift` draws it; the build script compiles and runs it to bundle `AppIcon.icns`. Regenerate the README logo with `swiftc -o build/icon scripts/icon.swift && build/icon build/AppIcon.icns docs/logo.png`. The menu bar uses a white spiral galaxy (`Sources/Orbit/GalaxyIcon.swift`) as a template image that macOS adapts to the menu bar appearance.
+The app icon is a planet with its orbit on a near-black tile, the used part of the orbit lit in blue with the satellite at its tip. `scripts/icon.swift` draws it; the build script compiles and runs it to bundle `AppIcon.icns`. Regenerate the README logo with `swiftc -o build/icon scripts/icon.swift && build/icon build/AppIcon.icns docs/logo.png`. The menu bar draws the same planet and orbit in white (`Sources/Orbit/OrbitIcon.swift`), the used arc solid and the rest dimmed, as a template image that macOS adapts to the menu bar appearance.
 
 ## Logos
 

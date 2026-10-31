@@ -81,11 +81,11 @@ extension Locale {
     }
 }
 
-/// White galaxy silhouette. macOS adapts the template to the menu bar appearance.
+/// White orbit drawing from the app icon. macOS adapts the template to the menu bar appearance.
 enum StatusIcon {
     static func image() -> NSImage {
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
-            GalaxyIcon.draw(in: rect)
+            OrbitIcon.draw(in: rect)
             return true
         }
         image.isTemplate = true
