@@ -13,7 +13,7 @@ mkdir -p "$STAGE"
 codesign --force --sign - build/Orbit.app
 cp -R build/Orbit.app "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
-# `diskutil image` replaces hdiutil on newer macOS; CI runners on older releases still need hdiutil.
+# `diskutil image` replaces hdiutil on newer macOS; older releases still need hdiutil.
 if diskutil image create from --help >/dev/null 2>&1; then
     diskutil image create from --format ULFO --volumeName "Orbit $VERSION" "$STAGE" "$DMG" >/dev/null
 else

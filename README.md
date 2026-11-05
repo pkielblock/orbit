@@ -15,7 +15,7 @@ Disk image for installing (rebuilds the app, then writes `build/Orbit-<version>.
 
 Use `./scripts/build-dmg.sh --open` to mount the image and open its drag-to-Applications window after building.
 
-Every push to `main` builds the disk image in GitHub Actions and publishes it as a release (`v<version>.<run>`) listing the commits since the previous one. The latest is on the repository's Releases page.
+Releases are built on a Mac, not in CI. From a clean, pushed `main`, `./scripts/release.sh` runs the tests, builds the disk image and publishes it as a GitHub release (`v<version>.<number>`, one above the last tag) listing the commits since the previous one. It needs an authenticated `gh`. The latest is on the repository's Releases page.
 
 ## Updates
 
@@ -23,7 +23,7 @@ Orbit checks for a newer stable release on startup and every 24 hours while runn
 
 When available, **Update & restart** downloads the release disk image over HTTPS from the public GitHub release, verifies GitHub's SHA-256 asset digest, checks the bundled app identity, version and code signature, then stages it beside the installed app. Orbit quits, replaces the app and relaunches at the same path. The installer restores the previous app if replacement or the launch request fails. It requires a writable app and parent folder; move the app out of its disk image into Applications first. No administrator prompt is requested. A successful launch request does not detect subsequent crashes.
 
-CI stamps the full `<version>.<run>` into the app so successive releases compare correctly. Older releases without matching bundle versions cannot be installed by the updater. Local builds keep the version from `Resources/Info.plist`; `ORBIT_RELEASE_VERSION` overrides it for release builds. Update metadata stays in memory. Temporary downloads and the previous app are removed after installation; a failed rollback preserves the backup in the adjacent `.Orbit-update-*` directory. No new dependencies are required.
+`scripts/release.sh` stamps the full `<version>.<number>` into the app so successive releases compare correctly. Older releases without matching bundle versions cannot be installed by the updater. Local builds keep the version from `Resources/Info.plist`; `ORBIT_RELEASE_VERSION` overrides it for release builds. Update metadata stays in memory. Temporary downloads and the previous app are removed after installation; a failed rollback preserves the backup in the adjacent `.Orbit-update-*` directory. No new dependencies are required.
 
 The app is Apple silicon only, ad-hoc signed and not notarized. After installing a downloaded image, the first launch is blocked; allow it under System Settings > Privacy & Security > Open Anyway, or run `xattr -dr com.apple.quarantine /Applications/Orbit.app`.
 
