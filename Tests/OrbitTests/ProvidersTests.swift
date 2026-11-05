@@ -117,6 +117,48 @@ final class ProvidersTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(start), 2)
     }
 
+    /// Runs a shell script that leaves a `sleep` behind holding stdout, and kills that child afterwards. Returns the seconds taken.
+    private func runLeavingChild(_ script: String, timeout: TimeInterval, check: (String?) -> Void) throws -> TimeInterval {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pidFile = directory.appendingPathComponent("pid")
+        let start = Date()
+        let output = Shell.run("/bin/sh", ["-c", "sleep 20 & echo $! > '\(pidFile.path)'; \(script)"], timeout: timeout)
+        let elapsed = Date().timeIntervalSince(start)
+        let pid = try XCTUnwrap(Int32(String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)))
+        defer { kill(pid, SIGKILL) }
+        XCTAssertEqual(kill(pid, 0), 0, "the child must still hold the pipe when run returns")
+        check(output)
+        return elapsed
+    }
+
+    func testChildHoldingThePipeCannotOutliveTheTimeout() throws {
+        // The tool hangs too: killed at the timeout, so it counts as failed.
+        let hung = try runLeavingChild("wait", timeout: 0.5) { XCTAssertNil($0) }
+        XCTAssertGreaterThanOrEqual(hung, 0.5)
+        XCTAssertLessThan(hung, 3)
+        // The tool succeeded and left: its output counts, and the read stops soon after the exit instead of at the timeout.
+        XCTAssertLessThan(try runLeavingChild("printf done; exit 0", timeout: 10) { XCTAssertEqual($0, "done") }, 3)
+        // More than a pipe holds, written while the child keeps the pipe open: all of it is read.
+        XCTAssertLessThan(try runLeavingChild("yes | head -c 200000; exit 0", timeout: 10) { XCTAssertEqual($0?.count, 200_000) }, 3)
+    }
+
+    func testToolClosingItsOutputBeforeExitingKeepsItsResult() {
+        XCTAssertEqual(Shell.run("/bin/sh", ["-c", "printf x; exec 1>&-; sleep 0.05; exit 0"], timeout: 5), "x")
+        XCTAssertNil(Shell.run("/bin/sh", ["-c", "printf x; exec 1>&-; sleep 0.05; exit 3"], timeout: 5))
+        // Closed its output and hung: still killed at the timeout.
+        let start = Date()
+        XCTAssertNil(Shell.run("/bin/sh", ["-c", "printf x; exec 1>&-; exec sleep 30"], timeout: 0.3))
+        XCTAssertLessThan(Date().timeIntervalSince(start), 3)
+    }
+
+    func testShellReadsLongOutputAndReportsFailure() {
+        XCTAssertEqual(Shell.run("/bin/sh", ["-c", "yes | head -c 200000"], timeout: 5)?.count, 200_000)
+        XCTAssertEqual(Shell.run("/bin/sh", ["-c", "printf quick"], timeout: 5), "quick")
+        XCTAssertNil(Shell.run("/bin/sh", ["-c", "printf partial; exit 3"], timeout: 5))
+    }
+
     func testCodexHandshakeNotificationsAndLiveResult() throws {
         let executable = try fixture(account: #"{"type":"chatgpt","email":"unused@example.test"}"#)
         defer { try? FileManager.default.removeItem(at: executable.deletingLastPathComponent()) }

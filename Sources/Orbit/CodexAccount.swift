@@ -11,16 +11,25 @@ enum ProviderTools {
         return directories.map { "\($0)/\(name)" }
             .first { $0.hasPrefix("/") && FileManager.default.isExecutableFile(atPath: $0) }
     }
+
+    /// Quotes for a displayed shell command, so spaces and shell metacharacters remain literal.
+    static func quoted(_ text: String) -> String {
+        "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
 }
 
 /// A short-lived stdio client: no threads, prompts, conversations or credential copies.
 enum CodexAccount {
-    static func read(executable: String? = ProviderTools.executable("codex"), timeout: TimeInterval = 25) throws -> [String: Any] {
+    /// `folder` selects an added account through CODEX_HOME; nil keeps the default account.
+    static func read(executable: String? = ProviderTools.executable("codex"), folder: String? = nil, timeout: TimeInterval = 25) throws -> [String: Any] {
         var success = false
         defer { UsageAudit.record(provider: .codex, success: success) }
         guard let executable else { throw UsageError.missing(String(localized: "Install Codex CLI, then sign in with ChatGPT")) }
+        // Codex refuses a CODEX_HOME that does not exist. Never show the path itself.
+        if let folder, !FileManager.default.fileExists(atPath: folder) { throw UsageError.missing(String(localized: "Account folder not found")) }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
+        if let folder { process.environment = ProcessInfo.processInfo.environment.merging(["CODEX_HOME": folder]) { $1 } }
         process.arguments = ["app-server", "-c", "analytics.enabled=false"]
         // The app server must not inherit a project's working directory/configuration.
         process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser

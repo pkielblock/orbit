@@ -9,7 +9,6 @@
 "Updated %@" = "Atualizado às %@";
 "Waiting for first update" = "Aguardando a primeira atualização";
 "Open %@ dashboard in your browser" = "Abrir o painel do %@ no navegador";
-"Connecting…" = "Conectando…";
 "Check connection" = "Verifique a conexão";
 "Session" = "Sessão";
 "Weekly" = "Semanal";
@@ -18,13 +17,30 @@
 "%@, %@ used, %@" = "%1$@, %2$@ usado, %3$@";
 ", near limit" = ", perto do limite";
 "Provider error: %@. Displayed quotas may be stale." = "Erro do provedor: %@. As cotas exibidas podem estar desatualizadas.";
-"Connect %@" = "Conectar %@";
 "Quota from %@" = "Cota das %@";
 "reset unknown" = "renovação desconhecida";
 "resetting now" = "renovando agora";
 "resets in %@ (%@)" = "renova em %1$@ (%2$@)";
 "resets %@" = "renova %@";
 "Orbit, open the usage dashboard" = "Orbit, abrir o painel de uso";
+"Provider" = "Provedor";
+"Configure" = "Configurar";
+"Configure %@ accounts" = "Configurar contas do %@";
+"Add, rename or remove %@ accounts" = "Adicionar, renomear ou remover contas do %@";
+"Sign in…" = "Entrar…";
+
+/* Tokens */
+"Tokens" = "Tokens";
+"All accounts" = "Todas as contas";
+"This session" = "Nesta sessão";
+"Last 7 days" = "Últimos 7 dias";
+"Today" = "Hoje";
+"No token logs yet" = "Ainda sem registros de tokens";
+"Antigravity does not report token counts" = "O Antigravity não informa a contagem de tokens";
+"Tokens per day, last 7 days" = "Tokens por dia, últimos 7 dias";
+"Tokens this session, %@" = "Tokens nesta sessão, %@";
+"%@, %@ tokens" = "%1$@, %2$@ tokens";
+"%@ %@: %@ tokens" = "%1$@ %2$@: %3$@ tokens";
 
 /* Settings */
 "Display" = "Exibição";
@@ -35,9 +51,6 @@
 "Command-= and Command-minus also change the size" = "Command-= e Command-menos também mudam o tamanho";
 "Blur" = "Desfoque";
 "Darkness" = "Escuridão";
-"Providers" = "Provedores";
-"Sign-in for Claude, Codex and Antigravity" = "Login no Claude, Codex e Antigravity";
-"Connect" = "Conectar";
 "About" = "Sobre";
 "Version" = "Versão";
 "Update to %@" = "Atualizar para %@";
@@ -62,15 +75,30 @@
 "Downloaded app does not match the release, current app unchanged" = "O app baixado não corresponde à versão, o app atual não mudou";
 "Update helper missing, reinstall Orbit from Releases" = "Assistente de atualização ausente, reinstale o Orbit pela página de versões";
 
-/* Connecting providers */
-"Connect your providers" = "Conecte seus provedores";
-"Orbit uses accounts signed in through your provider tools. Complete sign-in, then check connections." = "O Orbit usa as contas conectadas pelas ferramentas de cada provedor. Faça o login e depois verifique as conexões.";
+/* Accounts */
+"%@ accounts" = "Contas do %@";
+"Orbit reads quotas from accounts signed in through %@. Sign-in happens in Terminal; Orbit never sees passwords or tokens." = "O Orbit lê as cotas das contas conectadas pelo %@. O login acontece no Terminal; o Orbit nunca vê senhas nem tokens.";
+"Default" = "Padrão";
+"Account name" = "Nome da conta";
+"Add account" = "Adicionar conta";
+"Name" = "Nome";
+"Folder" = "Pasta";
+"New folder" = "Nova pasta";
+"Choose existing…" = "Escolher existente…";
+"Cancel" = "Cancelar";
+"Add" = "Adicionar";
+"Remove" = "Remover";
+"Name already used" = "Nome já usado";
+"Folder already used" = "Pasta já usada";
+"Could not create the folder" = "Não foi possível criar a pasta";
+"Account folder not found" = "Pasta da conta não encontrada";
+"Remove %@ from Orbit?" = "Remover %@ do Orbit?";
+"Remove %@ from Orbit" = "Remover %@ do Orbit";
+"Orbit stops reading this account. Its folder and sign-in stay on your Mac." = "O Orbit deixa de ler esta conta. A pasta e o login continuam no seu Mac.";
+"Copy sign-in command for %@ and open Terminal" = "Copiar o comando de login de %@ e abrir o Terminal";
 "Not checked" = "Não verificado";
-"Sign-in needed" = "Login necessário";
+"Sign-in needed" = "Precisa entrar";
 "Connected" = "Conectado";
-"Install Claude Code if needed. Run this command and sign in with your Claude subscription. Allow Keychain access when prompted." = "Instale o Claude Code se precisar. Rode este comando e entre com sua assinatura do Claude. Permita o acesso às Chaves quando for pedido.";
-"Install Codex CLI if needed. Run this command and choose Sign in with ChatGPT. An API key does not provide subscription quotas." = "Instale o Codex CLI se precisar. Rode este comando e escolha Sign in with ChatGPT. Uma chave de API não tem cotas de assinatura.";
-"Install Antigravity CLI if needed. Run agy and complete interactive sign-in. Orbit then reads your account quotas through /usage." = "Instale o Antigravity CLI se precisar. Rode agy e conclua o login interativo. Depois o Orbit lê as cotas da sua conta pelo /usage.";
 "Copy command and open Terminal" = "Copiar comando e abrir o Terminal";
 "Copied, paste it in Terminal" = "Copiado, cole no Terminal";
 "Installation and sign-in help" = "Ajuda de instalação e login";

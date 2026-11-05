@@ -30,13 +30,25 @@ enum PanelScale: String, CaseIterable {
 
 @MainActor
 final class GalaxyModel: ObservableObject {
-    @Published var usage: [Provider: ProviderUsage] = [:]
+    @Published var accounts = AccountStore.load()
+    /// Keyed by account id. Results for a removed account are dropped before they get here.
+    @Published var usage: [UUID: ProviderUsage] = [:]
+    /// Per provider across its accounts; nil until the first scan ends.
+    @Published var tokens: [Provider: ProviderTokens] = [:]
+    @Published var selectedProvider = Provider(rawValue: UserDefaults.standard.string(forKey: "selectedProvider") ?? "") ?? .claude
     @Published var refreshing = false
     @Published var refreshedAt: Date?
     @Published var visible = false
     @Published var panelScale = PanelScale(rawValue: UserDefaults.standard.string(forKey: "panelSize") ?? "") ?? .normal
     @Published var panelSize = NSSize(width: 340, height: 600)
-    @Published var showingConnections = false
+    /// The provider whose Configure sheet is open.
+    @Published var configuring: Provider?
+    /// The account the sheet opens on, from a card's "Sign in…".
+    var configuringAccount: UUID?
+    /// The sheet's Add form is open.
+    @Published var addingAccount = false
+    /// Tells the app the account list changed; true when one was added.
+    var accountsChanged: (Bool) -> Void = { _ in }
     @Published var showingSettings = false
     /// Sideline's Blur and Darkness pair: how opaque the popover blur is, and how dark the tint over it.
     /// Blur falls back to the old Transparency setting, inverted.
@@ -61,6 +73,39 @@ final class GalaxyModel: ObservableObject {
             }
         }
     }
+
+    func accounts(for provider: Provider) -> [Account] { accounts.filter { $0.provider == provider } }
+
+    func select(_ provider: Provider) {
+        selectedProvider = provider
+        UserDefaults.standard.set(provider.rawValue, forKey: "selectedProvider")
+    }
+
+    func configure(_ provider: Provider, account: UUID? = nil) {
+        configuringAccount = account
+        addingAccount = false
+        configuring = provider
+    }
+
+    func addAccount(_ account: Account) {
+        accounts.append(account)
+        AccountStore.save(accounts)
+        accountsChanged(true)
+    }
+
+    func renameAccount(_ id: UUID, to name: String) {
+        guard let index = accounts.firstIndex(where: { $0.id == id }) else { return }
+        accounts[index].name = name
+        AccountStore.save(accounts)
+    }
+
+    /// Only forgets the account: its folder and credentials stay where they are, even a folder Orbit created.
+    func removeAccount(_ id: UUID) {
+        accounts.removeAll { $0.id == id && $0.folder != nil }
+        usage[id] = nil
+        AccountStore.save(accounts)
+        accountsChanged(false)
+    }
 }
 
 enum Galaxy {
@@ -71,17 +116,20 @@ enum Galaxy {
     static let card = Color.white.opacity(0.04)
     /// Bars stay grey until a quota nears its limit, so warnings are the only color in the meters.
     static let bar = Color.white.opacity(0.7)
-    static func accent(_ provider: Provider) -> Color {
-        switch provider {
-        case .claude: return Color(red: 1, green: 0.64, blue: 0.46)
-        case .codex: return Color(red: 0.48, green: 0.88, blue: 0.79)
-        case .antigravity: return Color(red: 0.69, green: 0.59, blue: 1)
-        }
+    /// Toned red for bad news; orange stays reserved for the 70-89% meter state.
+    static let errorText = Color(red: 240 / 255, green: 92 / 255, blue: 92 / 255)
+
+    static func status(_ usage: ProviderUsage?) -> String {
+        guard let usage else { return String(localized: "Not checked") }
+        if usage.needsConnection { return String(localized: "Sign-in needed") }
+        return usage.error == nil ? String(localized: "Connected") : String(localized: "Check connection")
     }
 }
 
 struct GalaxyPanel: View {
     static let width: CGFloat = 460
+    /// Settings keeps its room when the selected tab is short.
+    private static let settingsHeight: CGFloat = 480
     @ObservedObject var model: GalaxyModel
     @ObservedObject var updater = AppUpdater()
     let refresh: () -> Void
@@ -94,16 +142,11 @@ struct GalaxyPanel: View {
         VStack(alignment: .leading, spacing: 12) {
             header
             if measuring {
-                cards
+                if model.showingSettings { Color.clear.frame(height: Self.settingsHeight) } else { tabs }
             } else if model.showingSettings {
                 settingsView.transition(screen)
             } else {
-                ViewThatFits(in: .vertical) {
-                    cards.fixedSize(horizontal: false, vertical: true)
-                    // The overlay scroll bar's lane, clear of the percentages.
-                    ScrollView { cards.padding(.trailing, 12) }
-                }
-                .transition(screen)
+                tabs.transition(screen)
             }
         }
         .animation(reduceMotion || measuring ? nil : .easeOut(duration: 0.2), value: model.showingSettings)
@@ -117,8 +160,9 @@ struct GalaxyPanel: View {
         .foregroundStyle(.white)
         .preferredColorScheme(.dark)
         .translatesProviderText()
-        .sheet(isPresented: $model.showingConnections) {
-            ProviderConnections(model: model, refresh: refresh)
+        // The measuring copy must never present.
+        .sheet(item: measuring ? .constant(nil) : $model.configuring) { provider in
+            ProviderAccounts(model: model, provider: provider, refresh: refresh)
         }
     }
 
@@ -130,17 +174,64 @@ struct GalaxyPanel: View {
         return model.refreshedAt.map { String(localized: "Updated \(Format.clockTime($0))") } ?? String(localized: "Waiting for first update")
     }
 
-    private var cards: some View {
-        VStack(spacing: 16) {
-            ForEach(Array(Provider.allCases.enumerated()), id: \.offset) { index, provider in
-                ProviderCard(provider: provider, usage: model.usage[provider], active: !measuring && model.visible && !reduceMotion,
-                             connect: { model.showingConnections = true })
-                    .opacity(measuring || model.visible || !model.usage.isEmpty ? 1 : 0)
-                    .offset(y: measuring || model.visible || !model.usage.isEmpty ? 0 : 4)
-                    .animation(reduceMotion || measuring ? nil : .easeOut(duration: 0.2).delay(Double(index) * 0.05), value: model.visible)
+    private func select(_ provider: Provider) {
+        model.showingSettings = false
+        model.select(provider)
+        resize(model.panelScale) // measures the new tab
+    }
+
+    private var tabs: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ProviderTabs(selection: model.selectedProvider, select: select)
+            if measuring {
+                tabContent
+            } else {
+                // A ZStack, so the outgoing tab fades in place instead of stacking above the new one.
+                ZStack(alignment: .topLeading) {
+                    ViewThatFits(in: .vertical) {
+                        tabContent.fixedSize(horizontal: false, vertical: true)
+                        // The overlay scroll bar's lane, clear of the percentages.
+                        ScrollView { tabContent.padding(.trailing, 12) }
+                    }
+                    .id(model.selectedProvider)
+                    .transition(screen)
+                }
             }
         }
-        .padding(1)
+        .animation(reduceMotion || measuring ? nil : .easeOut(duration: 0.2), value: model.selectedProvider)
+    }
+
+    private var tabContent: some View {
+        let provider = model.selectedProvider
+        let accounts = model.accounts(for: provider)
+        return VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Link(destination: provider.dashboardURL) {
+                        HStack(spacing: 4) {
+                            Text(provider.name).font(.system(size: 15, weight: .medium))
+                            Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open \(provider.name) dashboard in your browser")
+                    .accessibilityLabel("Open \(provider.name) dashboard in your browser")
+                    Spacer()
+                    Button("Configure") { model.configure(provider) }
+                        .font(.system(size: 12, weight: .medium)).foregroundStyle(Galaxy.accentText)
+                        .buttonStyle(.plain)
+                        .help("Add, rename or remove \(provider.name) accounts")
+                        .accessibilityLabel("Configure \(provider.name) accounts")
+                }
+                ForEach(accounts) { account in
+                    AccountCard(account: account, usage: model.usage[account.id], animated: model.visible && !measuring,
+                                signIn: { model.configure(provider, account: account.id) })
+                }
+            }
+            TokensSection(provider: provider, tokens: model.tokens[provider], accountCount: accounts.count,
+                          animated: model.visible && !measuring)
+        }
     }
 
     static func fittedSize(model: GalaxyModel, available: NSSize) -> NSSize {
@@ -152,8 +243,6 @@ struct GalaxyPanel: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Circle().fill(model.refreshing ? Color.orange : Color.green).frame(width: 6, height: 6)
-                .accessibilityHidden(true)
             Text(status)
                 .font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
                 .lineLimit(1).truncationMode(.middle)
@@ -185,6 +274,9 @@ struct GalaxyPanel: View {
                 Button("Quit") { NSApp.terminate(nil) }.keyboardShortcut("q")
                 Button("Larger") { resize(model.panelScale.stepped(1)) }.keyboardShortcut("=")
                 Button("Smaller") { resize(model.panelScale.stepped(-1)) }.keyboardShortcut("-")
+                ForEach(Array(Provider.allCases.enumerated()), id: \.offset) { index, provider in
+                    Button(provider.name) { select(provider) }.keyboardShortcut(KeyEquivalent(Character("\(index + 1)")))
+                }
             }
             .opacity(0).accessibilityHidden(true)
         }
@@ -192,7 +284,10 @@ struct GalaxyPanel: View {
 
     // Sideline's gear is a tab, not a dropdown: a menu can't hold a slider.
     private var settings: some View {
-        Button { model.showingSettings.toggle() } label: {
+        Button {
+            model.showingSettings.toggle()
+            resize(model.panelScale) // settings needs its own height
+        } label: {
             Image(systemName: "gearshape").font(.system(size: 13, weight: .medium))
                 .frame(width: 30, height: 26)
                 .foregroundStyle(model.showingSettings ? Color.white : .secondary)
@@ -223,13 +318,6 @@ struct GalaxyPanel: View {
                 .help("Command-= and Command-minus also change the size")
                 Slider(value: $model.blur, in: 0...1) { Text("Blur") }
                 Slider(value: $model.darkness, in: 0...0.9) { Text("Darkness") }
-            }
-            Section("Providers") {
-                HStack {
-                    Text("Sign-in for Claude, Codex and Antigravity").foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Connect") { model.showingConnections = true }
-                }
             }
             Section("About") {
                 LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
@@ -263,87 +351,121 @@ struct GalaxyPanel: View {
     }
 }
 
-private struct ProviderCard: View {
-    let provider: Provider
-    let usage: ProviderUsage?
-    let active: Bool
-    var connect: () -> Void = {}
-    private var accent: Color { Galaxy.accent(provider) }
+/// Sideline's tab bar: one faint capsule, the selection an accent capsule that slides between the segments.
+private struct ProviderTabs: View {
+    let selection: Provider
+    let select: (Provider) -> Void
+    @Namespace private var namespace
 
     var body: some View {
-        // Sideline layout: a bold section title, then the content in a faint card.
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(nsImage: Logos.image(for: provider, height: 18))
-                    .resizable().frame(width: 18, height: 18).foregroundStyle(accent)
-                    .accessibilityHidden(true)
-                Link(destination: provider.dashboardURL) {
-                    HStack(spacing: 4) {
-                        Text(provider.name).font(.system(size: 15, weight: .medium))
-                        Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.secondary)
+        HStack(spacing: 0) {
+            ForEach(Provider.allCases) { provider in
+                let selected = provider == selection
+                Button { select(provider) } label: {
+                    HStack(spacing: 6) {
+                        Image(nsImage: Logos.image(for: provider, height: 14))
+                            .resizable().frame(width: 14, height: 14)
+                            .accessibilityHidden(true)
+                        Text(provider.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
                     }
+                    .foregroundStyle(selected ? Color.white : .secondary)
+                    .frame(maxWidth: .infinity, minHeight: 24)
+                    .background {
+                        if selected { Capsule().fill(Galaxy.accent).matchedGeometryEffect(id: "tab", in: namespace) }
+                    }
+                    .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .help("Open \(provider.name) dashboard in your browser")
-                .accessibilityLabel("Open \(provider.name) dashboard in your browser")
+                .accessibilityLabel(provider.name)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+        .padding(4)
+        .background(.white.opacity(0.06), in: Capsule())
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Provider")
+    }
+}
+
+private struct AccountCard: View {
+    let account: Account
+    let usage: ProviderUsage?
+    let animated: Bool
+    let signIn: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Text(account.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
                 Spacer()
                 if usage == nil {
-                    Text("Connecting…").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text("Checking…").font(.system(size: 11)).foregroundStyle(.secondary)
+                } else if usage?.needsConnection == true {
+                    Text("Sign-in needed").font(.system(size: 11)).foregroundStyle(.secondary)
                 } else if usage?.error != nil {
-                    Text("Check connection").font(.system(size: 11, weight: .medium)).foregroundStyle(Color.orange)
+                    Text("Check connection").font(.system(size: 11, weight: .medium)).foregroundStyle(Galaxy.errorText)
                 }
             }
-            VStack(alignment: .leading, spacing: 12) {
-                UsageMeter(title: String(localized: "Session"), window: usage?.session, active: active)
-                UsageMeter(title: String(localized: "Weekly"), window: usage?.weekly, active: active)
-                if let error = usage?.error.map(translated) {
-                    Text(error).font(.system(size: 10)).foregroundStyle(Color.orange)
-                        .lineLimit(1).truncationMode(.middle).help(error)
-                        .accessibilityLabel("Provider error: \(error). Displayed quotas may be stale.")
-                }
-                if usage?.needsConnection == true {
-                    Button("Connect \(provider.name)", action: connect)
-                        .font(.system(size: 11, weight: .medium)).buttonStyle(.plain)
-                        .foregroundStyle(accent)
-                } else if usage?.error != nil, let date = usage?.updatedAt {
-                    Text("Quota from \(Format.clockTime(date))")
-                        .font(.system(size: 10)).foregroundStyle(.secondary)
-                }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(account.name + ", " + Galaxy.status(usage))
+            if usage?.needsConnection != true {
+                UsageMeter(title: String(localized: "Session"), window: usage?.session, animated: animated)
+                UsageMeter(title: String(localized: "Weekly"), window: usage?.weekly, animated: animated)
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Galaxy.card, in: RoundedRectangle(cornerRadius: 12))
+            if let error = usage?.error.map(translated) {
+                Text(error).font(.system(size: 11)).foregroundStyle(Galaxy.errorText)
+                    .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("Provider error: \(error). Displayed quotas may be stale.")
+            }
+            if usage?.needsConnection == true {
+                Button("Sign in…", action: signIn)
+                    .font(.system(size: 12, weight: .medium)).buttonStyle(.plain)
+                    .foregroundStyle(Galaxy.accentText)
+            } else if usage?.error != nil, let date = usage?.updatedAt {
+                Text("Quota from \(Format.clockTime(date))")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
         }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Galaxy.card, in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .contain)
     }
 }
 
 private struct UsageMeter: View {
     let title: String
     let window: UsageWindow?
-    let active: Bool
+    let animated: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var percent: Double? { window?.usedPercent.flatMap { $0.isFinite ? $0 : nil } }
     private var fraction: Double { min(max((percent ?? 0) / 100, 0), 1) }
     private var tint: Color { (percent ?? 0) >= 90 ? .red : (percent ?? 0) >= 70 ? .orange : Galaxy.bar }
+    private var moves: Bool { animated && !reduceMotion }
 
     var body: some View {
         VStack(spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(title).font(.system(size: 11, weight: .medium))
                 Text(percent == nil ? String(localized: "not reported") : Format.reset(window?.resetsAt))
-                    .font(.system(size: 10).monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
+                    .font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
                 Spacer()
                 if (percent ?? 0) >= 90 {
-                    Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(tint)
+                    Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 11)).foregroundStyle(tint)
                         .help("Near limit")
                 }
                 Text(Format.percent(percent)).font(.system(size: 13, weight: .medium).monospacedDigit())
                     .foregroundStyle((percent ?? 0) >= 70 ? tint : .white)
                     .contentTransition(.numericText())
-                    .animation(active ? .spring(response: 0.4, dampingFraction: 0.85) : nil, value: percent)
+                    .animation(moves ? .easeOut(duration: 0.2) : nil, value: percent)
             }
-            OrbitBar(fraction: fraction, tint: tint, active: active)
-                .frame(height: 12)
+            GeometryReader { track in
+                Capsule().fill(.white.opacity(0.08))
+                Capsule().fill(tint).frame(width: track.size.width * fraction)
+                    .animation(moves ? .easeOut(duration: 0.3) : nil, value: fraction)
+            }
+            .frame(height: 4)
+            .accessibilityHidden(true)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(localized: "\(title), \(Format.percent(percent)) used, \(Format.reset(window?.resetsAt))")
@@ -351,79 +473,124 @@ private struct UsageMeter: View {
     }
 }
 
-/// Quota is accurate at rest; the highlight flows continuously without changing the value.
-/// An increasing quota launches a rocket that follows the interpolated leading edge.
-// Explicit wrapper alias also supports command-line SDKs without the new State macro plugin.
-private typealias ViewState<Value> = SwiftUI.State<Value>
-
-private struct OrbitBar: View {
-    let fraction: Double
-    let tint: Color
-    let active: Bool
-    @ViewState private var origin = 0.0
-    @ViewState private var destination = 0.0
-    @ViewState private var launchedAt = Date.distantPast
-    private let duration = 1.6
-
-    private func displayed(at date: Date) -> Double {
-        let progress = min(max(date.timeIntervalSince(launchedAt) / duration, 0), 1)
-        let eased = progress * progress * (3 - 2 * progress)
-        return origin + (destination - origin) * eased
-    }
-
-    private func transition(to value: Double, from start: Double? = nil) {
-        origin = start ?? displayed(at: Date())
-        destination = value
-        launchedAt = Date()
-    }
+private struct TokensSection: View {
+    let provider: Provider
+    let tokens: ProviderTokens?
+    let accountCount: Int
+    let animated: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var grown = false
 
     var body: some View {
-        // Read state in the view body so Canvas captures the latest transition on first appearance.
-        let start = origin
-        let end = destination
-        let began = launchedAt
-        return TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !active)) { timeline in
-            Canvas { context, size in
-                let progress = min(max(timeline.date.timeIntervalSince(began) / duration, 0), 1)
-                let current = active ? start + (end - start) * progress * progress * (3 - 2 * progress) : fraction
-                let width = size.width * current
-                let track = CGRect(x: 0, y: 4, width: size.width, height: 4)
-                context.fill(Path(roundedRect: track, cornerRadius: 2), with: .color(.white.opacity(0.08)))
-                if width > 0 {
-                    let fill = Path(roundedRect: CGRect(x: 0, y: 4, width: width, height: 4), cornerRadius: 2)
-                    context.fill(fill, with: .color(tint))
-                }
-                let elapsed = timeline.date.timeIntervalSince(began)
-                if active && end > start && elapsed >= 0 && elapsed < duration {
-                    var rocket = context
-                    rocket.opacity = min(1, (duration - elapsed) / 0.2)
-                    rocket.translateBy(x: min(max(width, 10), size.width - 10), y: 6)
-                    let flicker = 2 + sin(elapsed * 50) * 1.5
-                    var flame = Path()
-                    flame.move(to: CGPoint(x: -5, y: -2))
-                    flame.addLine(to: CGPoint(x: -11 - flicker, y: 0))
-                    flame.addLine(to: CGPoint(x: -5, y: 2))
-                    flame.closeSubpath()
-                    rocket.fill(flame, with: .color(.orange))
-                    var body = Path()
-                    body.move(to: CGPoint(x: 9, y: 0))
-                    body.addQuadCurve(to: CGPoint(x: -5, y: -3), control: CGPoint(x: 3, y: -5))
-                    body.addLine(to: CGPoint(x: -8, y: -6))
-                    body.addLine(to: CGPoint(x: -7, y: 0))
-                    body.addLine(to: CGPoint(x: -8, y: 6))
-                    body.addLine(to: CGPoint(x: -5, y: 3))
-                    body.addQuadCurve(to: CGPoint(x: 9, y: 0), control: CGPoint(x: 3, y: 5))
-                    rocket.fill(body, with: .color(.white))
-                    rocket.fill(Path(ellipseIn: CGRect(x: 0, y: -1.5, width: 3, height: 3)), with: .color(tint))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Tokens").font(.system(size: 15, weight: .medium))
+                Spacer()
+                if accountCount >= 2 {
+                    Text("All accounts").font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
+            if provider == .antigravity {
+                empty(String(localized: "Antigravity does not report token counts"))
+            } else if let tokens, tokens.isEmpty {
+                empty(String(localized: "No token logs yet"))
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    stats
+                    chart
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Galaxy.card, in: RoundedRectangle(cornerRadius: 12))
+            }
         }
-        .onAppear { transition(to: fraction, from: active ? 0 : fraction) }
-        .onChange(of: fraction) { value in transition(to: value) }
-        .onChange(of: active) { visible in
-            // Replay the entry flight on open; no offscreen animations or delayed tasks.
-            transition(to: fraction, from: visible ? 0 : fraction)
+    }
+
+    private func empty(_ text: String) -> some View {
+        Text(text).font(.system(size: 13)).foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, minHeight: 64)
+            .background(Galaxy.card, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var stats: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(tokens.map { Format.tokens($0.session) } ?? "—")
+                    .font(.system(size: 20, weight: .semibold).monospacedDigit())
+                    .fixedSize()
+                    .contentTransition(.numericText())
+                    .animation(animated && !reduceMotion ? .easeOut(duration: 0.2) : nil, value: tokens?.session)
+                    .help(tokens.map { Format.tokensFull($0.session) } ?? "")
+                    .accessibilityLabel(tokens.map { String(localized: "Tokens this session, \(Format.tokensFull($0.session))") } ?? String(localized: "This session"))
+                Spacer()
+                Text("Last 7 days").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(tokens.map { Format.tokens($0.week) } ?? "—")
+                    .font(.system(size: 13, weight: .medium).monospacedDigit())
+                    .fixedSize()
+                    .help(tokens.map { Format.tokensFull($0.week) } ?? "")
+            }
+            Text("This session").font(.system(size: 11)).foregroundStyle(.secondary)
+                .accessibilityHidden(true)
         }
-        .accessibilityHidden(true)
+    }
+
+    private var chart: some View {
+        let days = tokens?.days ?? TokenLogs.dayStarts(now: Date()).map { TokenDay(day: $0, tokens: 0) }
+        let maximum = days.map(\.tokens).max() ?? 0
+        return HStack(alignment: .bottom, spacing: 8) {
+            ForEach(days) { day in
+                TokenColumn(day: day.day, value: tokens == nil ? nil : day.tokens, maximum: maximum,
+                            isToday: day.id == days.last?.id, grown: grown || !animated || reduceMotion)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Tokens per day, last 7 days")
+        .onAppear {
+            if animated && !reduceMotion {
+                withAnimation(.easeOut(duration: 0.3)) { grown = true }
+            } else {
+                grown = true
+            }
+        }
+    }
+}
+
+private struct TokenColumn: View {
+    let day: Date
+    let value: Int?
+    let maximum: Int
+    let isToday: Bool
+    let grown: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        let full = Format.tokensFull(value ?? 0)
+        VStack(spacing: 4) {
+            Text(value.map { Format.tokens($0) } ?? "—")
+                .font(.system(size: 11).monospacedDigit())
+                .foregroundStyle(isToday ? Color.white : .secondary)
+                .lineLimit(1).fixedSize()
+            // Bars share one baseline; a zero day has none.
+            ZStack(alignment: .bottom) {
+                Color.clear
+                if let value, value > 0 {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(isToday ? Galaxy.accent : Color.white.opacity(hovering ? 0.45 : 0.3))
+                        .frame(height: TokenLogs.barHeight(value, maximum: maximum))
+                        .scaleEffect(y: grown ? 1 : 0, anchor: .bottom)
+                }
+            }
+            .frame(height: 64)
+            Text(isToday ? String(localized: "Today") : Format.shortWeekday(day))
+                .font(.system(size: 11))
+                .foregroundStyle(isToday ? Color.white : .secondary)
+                .lineLimit(1).fixedSize()
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .help("\(Format.longWeekday(day)) \(Format.monthDay(day)): \(full) tokens")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(Format.longWeekday(day)), \(full) tokens")
     }
 }
