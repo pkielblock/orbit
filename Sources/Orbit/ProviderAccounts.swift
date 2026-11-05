@@ -132,7 +132,7 @@ struct ProviderAccounts: View {
         addError = nil
     }
 
-    // Attached to the sheet's own window, so the panel is a child of the sheet instead of a window outside the popover.
+    // Its own dialog, not a sheet: a sheet hangs off this narrow window, and beside the menu bar icon it runs off the screen.
     private func chooseExisting() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -141,18 +141,22 @@ struct ProviderAccounts: View {
         panel.canCreateDirectories = true
         panel.showsHiddenFiles = true // config folders such as ~/.claude-work are hidden
         panel.directoryURL = URL(fileURLWithPath: Account.home)
-        let picked: (NSApplication.ModalResponse) -> Void = { response in
-            pickerRevision += 1 // the native radio keeps the clicked option otherwise, even when the panel is cancelled
-            guard response == .OK, let path = panel.url?.path else { return }
-            if AccountStore.folderUsed(path, provider: provider, in: model.accounts) {
-                addError = String(localized: "Folder already used")
-            } else {
-                addError = nil
-                chosenFolder = path
-                choice = .existing
-            }
+        NSApp.activate(ignoringOtherApps: true)
+        // The popover and this sheet float above the dialog, whose own level can't be raised, so they step down while it's open.
+        let floating = NSApp.windows.filter { $0.isVisible && $0.level > .modalPanel && !$0.className.contains("StatusBar") }
+        let levels = floating.map(\.level)
+        floating.forEach { $0.level = .normal }
+        let response = panel.runModal()
+        zip(floating, levels).forEach { $0.level = $1 }
+        pickerRevision += 1 // the native radio keeps the clicked option otherwise, even when the panel is cancelled
+        guard response == .OK, let path = panel.url?.path else { return }
+        if AccountStore.folderUsed(path, provider: provider, in: model.accounts) {
+            addError = String(localized: "Folder already used")
+        } else {
+            addError = nil
+            chosenFolder = path
+            choice = .existing
         }
-        if let window = NSApp.keyWindow { panel.beginSheetModal(for: window, completionHandler: picked) } else { panel.begin(completionHandler: picked) }
     }
 
     private func add() {
